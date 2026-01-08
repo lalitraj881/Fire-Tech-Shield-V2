@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { PriorityBadge } from "@/components/PriorityBadge";
+import { SiteMap } from "@/components/SiteMap";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, Calendar, Wrench, AlertTriangle, Navigation, Play, CheckCircle2 } from "lucide-react";
+import { MapPin, Calendar, Wrench, Navigation, Play, CheckCircle2 } from "lucide-react";
 import { useInspection } from "@/context/InspectionContext";
 
 export default function JobDetails() {
@@ -127,6 +128,9 @@ export default function JobDetails() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Site Map */}
+        <SiteMap siteName={job.siteName} />
 
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
