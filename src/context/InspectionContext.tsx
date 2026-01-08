@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback } from "react";
 import { mockDevices, mockJobs, type Device, type Job, type DeviceStatus } from "@/data/mockData";
 
 interface InspectionContextType {
@@ -9,13 +9,22 @@ interface InspectionContextType {
   getDevicesByJobId: (jobId: string) => Device[];
   getJobById: (jobId: string) => Job | undefined;
   getJobStats: (jobId: string) => { total: number; completed: number; passed: number; failed: number };
+  resetData: () => void;
 }
 
 const InspectionContext = createContext<InspectionContextType | undefined>(undefined);
 
+// Deep clone function to create fresh copies of mock data
+const cloneData = <T,>(data: T): T => JSON.parse(JSON.stringify(data));
+
 export function InspectionProvider({ children }: { children: ReactNode }) {
-  const [devices, setDevices] = useState<Device[]>(mockDevices);
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
+  const [devices, setDevices] = useState<Device[]>(() => cloneData(mockDevices));
+  const [jobs, setJobs] = useState<Job[]>(() => cloneData(mockJobs));
+
+  const resetData = useCallback(() => {
+    setDevices(cloneData(mockDevices));
+    setJobs(cloneData(mockJobs));
+  }, []);
 
   const updateDeviceStatus = (deviceId: string, status: DeviceStatus) => {
     setDevices((prev) =>
@@ -56,6 +65,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         getDevicesByJobId,
         getJobById,
         getJobStats,
+        resetData,
       }}
     >
       {children}
