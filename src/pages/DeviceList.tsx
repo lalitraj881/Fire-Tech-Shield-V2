@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { DeviceCard } from "@/components/DeviceCard";
 import { ProgressIndicator } from "@/components/ProgressIndicator";
+import { SiteMap } from "@/components/SiteMap";
+import { QRScanner } from "@/components/QRScanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QrCode, CheckCircle2 } from "lucide-react";
@@ -13,20 +16,26 @@ export default function DeviceList() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { getJobById, getDevicesByJobId, getJobStats } = useInspection();
+  const [scannerOpen, setScannerOpen] = useState(false);
   
   const job = getJobById(jobId || "");
   const devices = getDevicesByJobId(jobId || "");
   const stats = getJobStats(jobId || "");
+  
+  const pendingDevice = devices.find((d) => d.status === "pending");
+
+  const handleScanSuccess = (deviceId: string) => {
+    setScannerOpen(false);
+    toast({
+      title: "✅ Device Verified",
+      description: `${pendingDevice?.name} matched successfully`,
+    });
+    navigate(`/job/${jobId}/device/${deviceId}`);
+  };
 
   const handleQRScan = () => {
-    // Simulate QR scan - navigate to first pending device
-    const pendingDevice = devices.find((d) => d.status === "pending");
     if (pendingDevice) {
-      toast({
-        title: "✅ Device Verified",
-        description: `${pendingDevice.name} matched successfully`,
-      });
-      navigate(`/job/${jobId}/device/${pendingDevice.id}`);
+      setScannerOpen(true);
     } else {
       toast({
         title: "All devices inspected",
@@ -51,6 +60,13 @@ export default function DeviceList() {
             />
           </CardContent>
         </Card>
+
+        {/* Site Map */}
+        <SiteMap 
+          siteName={job.siteName} 
+          currentZone={pendingDevice?.zone} 
+          compact 
+        />
 
         {/* Device List */}
         <div className="space-y-3">
@@ -81,6 +97,15 @@ export default function DeviceList() {
           <QrCode className="w-6 h-6" />
         </Button>
       </div>
+
+      {/* QR Scanner Modal */}
+      <QRScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScanSuccess={handleScanSuccess}
+        expectedDeviceId={pendingDevice?.id}
+        deviceName={pendingDevice?.name}
+      />
     </div>
   );
 }
