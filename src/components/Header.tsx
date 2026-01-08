@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Shield, LogOut, User, ArrowLeft } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -54,6 +55,7 @@ export function Header({ showBack, title }: HeaderProps) {
         {/* Right Section */}
         {!isLoginPage && (
           <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary">
               <User className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">John Smith</span>
