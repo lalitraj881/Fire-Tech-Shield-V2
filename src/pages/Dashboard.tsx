@@ -3,12 +3,14 @@ import { Header } from "@/components/Header";
 import { JobCard } from "@/components/JobCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Wrench, AlertTriangle } from "lucide-react";
-import { getJobsByType } from "@/data/mockData";
+import { useInspection } from "@/context/InspectionContext";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("maintenance");
-  const maintenanceJobs = getJobsByType("maintenance");
-  const repairJobs = getJobsByType("repair");
+  const { jobs } = useInspection();
+  
+  const maintenanceJobs = jobs.filter((j) => j.type === "maintenance");
+  const repairJobs = jobs.filter((j) => j.type === "repair");
 
   return (
     <div className="min-h-screen bg-background">
