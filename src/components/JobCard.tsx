@@ -1,7 +1,17 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PriorityBadge } from "@/components/PriorityBadge";
-import { MapPin, Calendar, Wrench, AlertTriangle, ChevronRight } from "lucide-react";
+import { JobStatusBadge } from "@/components/JobStatusBadge";
+import { 
+  MapPin, 
+  Calendar, 
+  Wrench, 
+  AlertTriangle, 
+  ChevronRight,
+  Building2,
+  Navigation,
+  Smartphone
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { Job } from "@/data/mockData";
 import { cn } from "@/lib/utils";
@@ -22,10 +32,18 @@ export function JobCard({ job, className }: JobCardProps) {
     });
   };
 
+  const handleNavigate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Would open maps navigation in real app
+    window.open(`https://maps.google.com/?q=${job.siteGpsLat},${job.siteGpsLng}`, '_blank');
+  };
+
   return (
     <Card
       className={cn(
         "group cursor-pointer transition-all duration-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5",
+        job.status === "in-progress" && "border-primary/30 bg-primary/5",
+        job.status === "completed" && "opacity-60",
         className
       )}
       onClick={() => navigate(`/job/${job.id}`)}
@@ -35,16 +53,27 @@ export function JobCard({ job, className }: JobCardProps) {
           {/* Header */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <PriorityBadge priority={job.priority} />
+                <JobStatusBadge status={job.status} />
+              </div>
               <h3 className="font-semibold text-foreground truncate">{job.name}</h3>
-              <p className="text-sm text-muted-foreground truncate">{job.customerName}</p>
             </div>
-            <PriorityBadge priority={job.priority} />
           </div>
 
-          {/* Site Info */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <MapPin className="w-4 h-4 shrink-0" />
-            <span className="truncate">{job.siteName}</span>
+          {/* Customer & Site Info */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-sm">
+              <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-foreground font-medium truncate">{job.customerName}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <MapPin className="w-4 h-4 shrink-0" />
+              <span className="truncate">{job.siteName}</span>
+            </div>
+            <div className="text-xs text-muted-foreground pl-6 truncate">
+              {job.siteAddress}
+            </div>
           </div>
 
           {/* Dates */}
@@ -69,28 +98,27 @@ export function JobCard({ job, className }: JobCardProps) {
           <div className="flex items-center justify-between pt-2 border-t border-border">
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-1.5">
-                <Wrench className="w-4 h-4 text-muted-foreground" />
+                <Smartphone className="w-4 h-4 text-muted-foreground" />
                 <span className="text-foreground">{job.estimatedDeviceCount} devices</span>
               </div>
               {job.openNCCount > 0 && (
                 <div className="flex items-center gap-1.5 text-warning">
                   <AlertTriangle className="w-4 h-4" />
-                  <span>{job.openNCCount} open NC</span>
+                  <span>{job.openNCCount} NC</span>
                 </div>
               )}
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Navigate to map - for now just navigate to job
-                navigate(`/job/${job.id}`);
-              }}
-            >
-              <ChevronRight className="w-5 h-5" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-primary hover:bg-primary/10"
+                onClick={handleNavigate}
+              >
+                <Navigation className="w-4 h-4" />
+              </Button>
+              <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            </div>
           </div>
 
           {/* NC Reference for Repair Jobs */}

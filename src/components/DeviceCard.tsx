@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
-import { MapPin, ChevronRight } from "lucide-react";
+import { MapPin, ChevronRight, Smartphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { Device } from "@/data/mockData";
 import { cn } from "@/lib/utils";
@@ -25,23 +25,42 @@ export function DeviceCard({ device, jobId, className }: DeviceCardProps) {
     >
       <CardContent className="p-4">
         <div className="flex items-center gap-4">
-          {/* Status Indicator */}
-          <div
-            className={cn(
-              "w-2 h-12 rounded-full shrink-0",
-              device.status === "pending" && "bg-muted-foreground",
-              device.status === "completed" && "bg-success",
-              device.status === "failed" && "bg-destructive"
+          {/* Device Image or Status Indicator */}
+          <div className="relative shrink-0">
+            {device.imageUrl ? (
+              <div className="w-14 h-14 rounded-lg overflow-hidden bg-muted">
+                <img 
+                  src={device.imageUrl} 
+                  alt={device.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center">
+                <Smartphone className="w-6 h-6 text-muted-foreground" />
+              </div>
             )}
-          />
+            {/* Status dot overlay */}
+            <div
+              className={cn(
+                "absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-background",
+                device.status === "pending" && "bg-muted-foreground",
+                device.status === "completed" && "bg-success",
+                device.status === "failed" && "bg-destructive"
+              )}
+            />
+          </div>
 
           {/* Device Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-1">
               <h4 className="font-medium text-foreground truncate">{device.name}</h4>
-              <span className="text-xs text-muted-foreground">#{device.serialNumber}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <span className="px-1.5 py-0.5 rounded bg-secondary">{device.type}</span>
+              <span className="font-mono">#{device.serialNumber}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <MapPin className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">
                 {device.building} → {device.zone}
