@@ -11,6 +11,8 @@ import JobDetails from "./pages/JobDetails";
 import DeviceList from "./pages/DeviceList";
 import DeviceDetails from "./pages/DeviceDetails";
 import JobSummary from "./pages/JobSummary";
+import AssetCreation from "./pages/AssetCreation";
+import NCDetails from "./pages/NCDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +33,8 @@ const App = () => (
               <Route path="/job/:jobId/devices" element={<DeviceList />} />
               <Route path="/job/:jobId/device/:deviceId" element={<DeviceDetails />} />
               <Route path="/job/:jobId/summary" element={<JobSummary />} />
+              <Route path="/asset/new" element={<AssetCreation />} />
+              <Route path="/nc/:ncId" element={<NCDetails />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

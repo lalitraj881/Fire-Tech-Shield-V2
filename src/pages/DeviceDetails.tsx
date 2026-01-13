@@ -2,22 +2,37 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { StatusBadge } from "@/components/StatusBadge";
+import { InspectionSeverityBadge } from "@/components/InspectionSeverityBadge";
 import { InspectionChecklist } from "@/components/InspectionChecklist";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Wrench, Shield, AlertTriangle, Play, CheckCircle2 } from "lucide-react";
+import { 
+  Calendar, 
+  MapPin, 
+  Play, 
+  CheckCircle2, 
+  QrCode, 
+  Wrench, 
+  AlertTriangle,
+  Building2,
+  Factory,
+  Shield,
+  Clock,
+  Image as ImageIcon
+} from "lucide-react";
 import { useInspection } from "@/context/InspectionContext";
-import { getDeviceHistory, getDeviceNCs } from "@/data/mockData";
+import { getDeviceHistory, type InspectionSeverity } from "@/data/mockData";
 
 export default function DeviceDetails() {
   const { jobId, deviceId } = useParams();
   const navigate = useNavigate();
   const [showChecklist, setShowChecklist] = useState(false);
-  const { devices, updateDeviceStatus } = useInspection();
+  const { devices, updateDeviceStatus, getNcsByDeviceId, getJobById } = useInspection();
   
   const device = devices.find((d) => d.id === deviceId);
   const history = getDeviceHistory(deviceId || "");
-  const ncs = getDeviceNCs(deviceId || "");
+  const ncs = getNcsByDeviceId(deviceId || "");
+  const job = getJobById(jobId || "");
 
   if (!device) {
     return <div className="p-8 text-center text-muted-foreground">Device not found</div>;
@@ -30,29 +45,66 @@ export default function DeviceDetails() {
       year: "numeric",
     });
 
-  const handleInspectionComplete = (result: "pass" | "fail") => {
+  const handleInspectionComplete = (result: "pass" | "fail", severity: InspectionSeverity) => {
     const newStatus = result === "pass" ? "completed" : "failed";
     updateDeviceStatus(device.id, newStatus);
     
-    // Navigate back after a delay
     setTimeout(() => {
       navigate(`/job/${jobId}/devices`);
     }, 1500);
   };
 
+  const openNcs = ncs.filter((nc) => nc.status === "open");
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <Header showBack title={device.name} />
       <main className="container px-4 py-6 space-y-6">
+        {/* Device Image & QR Code Card */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 gap-4">
+              {/* Device Image */}
+              <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+                {device.imageUrl ? (
+                  <img
+                    src={device.imageUrl}
+                    alt={device.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <ImageIcon className="w-12 h-12 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="absolute top-2 right-2">
+                  <StatusBadge status={device.status} />
+                </div>
+              </div>
+
+              {/* QR Code */}
+              <div className="aspect-square rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 flex flex-col items-center justify-center p-4">
+                <QrCode className="w-16 h-16 text-primary mb-2" />
+                <p className="text-xs text-muted-foreground text-center font-mono">
+                  {device.serialNumber}
+                </p>
+                <Button variant="ghost" size="sm" className="mt-2 text-xs">
+                  Scan to Verify
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Device Info Card */}
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Device Information</CardTitle>
-              <StatusBadge status={device.status} />
-            </div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              Device Information
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-muted-foreground">Serial Number</p>
@@ -63,21 +115,73 @@ export default function DeviceDetails() {
                 <p className="font-medium">{device.type}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Location</p>
-                <p className="font-medium">
-                  {device.building} → {device.zone}
-                </p>
+                <p className="text-muted-foreground">System Type</p>
+                <p className="font-medium">{device.systemType}</p>
               </div>
+              <div>
+                <p className="text-muted-foreground">Manufacturer</p>
+                <p className="font-medium">{device.manufacturer}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Location Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-primary" />
+              Location
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-start gap-3">
+              <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="font-medium">{device.building}</p>
+                <p className="text-muted-foreground">{device.zone}</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-sm">{device.locationDescription}</p>
+            </div>
+            {device.gpsLat && device.gpsLng && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <MapPin className="w-3 h-3" />
+                <span>GPS: {device.gpsLat.toFixed(6)}, {device.gpsLng.toFixed(6)}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Dates Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Important Dates
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Installed</p>
                 <p className="font-medium">{formatDate(device.installationDate)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Warranty Ends</p>
-                <p className="font-medium">{formatDate(device.warrantyEnd)}</p>
+                <p className="text-muted-foreground">Manufactured</p>
+                <p className="font-medium">{formatDate(device.manufacturingDate)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Expires</p>
+                <p className="text-muted-foreground">Warranty Start</p>
+                <p className="font-medium">{formatDate(device.warrantyStart)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Warranty End</p>
+                <p className="font-medium">{formatDate(device.warrantyEnd)}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-muted-foreground">Expiry Date</p>
                 <p className="font-medium text-warning">{formatDate(device.expiryDate)}</p>
               </div>
             </div>
@@ -87,7 +191,10 @@ export default function DeviceDetails() {
         {/* Inspection History */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Inspection History</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Inspection History
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {history.length === 0 ? (
@@ -103,15 +210,12 @@ export default function DeviceDetails() {
                     <div>
                       <p className="font-medium">{formatDate(h.date)}</p>
                       <p className="text-sm text-muted-foreground">{h.technician}</p>
+                      {h.notes && (
+                        <p className="text-xs text-muted-foreground mt-1">{h.notes}</p>
+                      )}
                     </div>
                   </div>
-                  <span
-                    className={`text-sm font-medium ${
-                      h.result === "pass" ? "text-success" : "text-destructive"
-                    }`}
-                  >
-                    {h.result.toUpperCase()}
-                  </span>
+                  <InspectionSeverityBadge severity={h.severity || (h.result === "pass" ? "pass" : "critical")} />
                 </div>
               ))
             )}
@@ -119,26 +223,34 @@ export default function DeviceDetails() {
         </Card>
 
         {/* Open NCs */}
-        {ncs.filter((nc) => nc.status === "open").length > 0 && (
+        {openNcs.length > 0 && (
           <Card className="border-warning/50">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-warning" />
-                Open NCs
+                Open NCs ({openNcs.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {ncs
-                .filter((nc) => nc.status === "open")
-                .map((nc) => (
-                  <div
-                    key={nc.id}
-                    className="p-3 rounded-lg bg-warning/10 border border-warning/20"
-                  >
+              {openNcs.map((nc) => (
+                <div
+                  key={nc.id}
+                  className="p-3 rounded-lg bg-warning/10 border border-warning/20 cursor-pointer hover:bg-warning/20 transition-colors"
+                  onClick={() => navigate(`/nc/${nc.id}`)}
+                >
+                  <div className="flex items-center justify-between mb-1">
                     <p className="font-medium text-warning">{nc.id}</p>
-                    <p className="text-sm text-muted-foreground">{nc.description}</p>
+                    <InspectionSeverityBadge severity={nc.severity} />
                   </div>
-                ))}
+                  <p className="text-sm text-muted-foreground">{nc.description}</p>
+                  {nc.workOrderId && (
+                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                      <Wrench className="w-3 h-3" />
+                      <span>WO: {nc.workOrderId} - {nc.workOrderStatus}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}
@@ -168,7 +280,8 @@ export default function DeviceDetails() {
       <InspectionChecklist
         open={showChecklist}
         onOpenChange={setShowChecklist}
-        deviceName={device.name}
+        device={device}
+        jobId={jobId || ""}
         onComplete={handleInspectionComplete}
       />
     </div>
