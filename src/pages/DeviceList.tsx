@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { DeviceCard } from "@/components/DeviceCard";
 import { ProgressIndicator } from "@/components/ProgressIndicator";
-import { SiteMap } from "@/components/SiteMap";
+import { LiveGPSMap } from "@/components/LiveGPSMap";
 import { QRScanner } from "@/components/QRScanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,11 +61,13 @@ export default function DeviceList() {
           </CardContent>
         </Card>
 
-        {/* Site Map */}
-        <SiteMap 
-          siteName={job.siteName} 
-          currentZone={pendingDevice?.zone} 
-          compact 
+        {/* Live GPS Map */}
+        <LiveGPSMap 
+          siteName={job.siteName}
+          siteGpsLat={job.siteGpsLat}
+          siteGpsLng={job.siteGpsLng}
+          devices={devices}
+          currentDevice={pendingDevice}
         />
 
         {/* Device List */}
@@ -75,7 +77,7 @@ export default function DeviceList() {
           ))}
         </div>
 
-        {/* Complete Button - shows when all devices done */}
+        {/* Complete Button */}
         {stats.completed === stats.total && stats.total > 0 && (
           <Button
             className="w-full h-14 animate-fade-in"
