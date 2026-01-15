@@ -4,7 +4,9 @@ import { Header } from "@/components/Header";
 import { StatusBadge } from "@/components/StatusBadge";
 import { InspectionSeverityBadge } from "@/components/InspectionSeverityBadge";
 import { InspectionChecklist } from "@/components/InspectionChecklist";
+import { QRScanner } from "@/components/QRScanner";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Calendar, 
@@ -26,7 +28,10 @@ import { getDeviceHistory, type InspectionSeverity } from "@/data/mockData";
 export default function DeviceDetails() {
   const { jobId, deviceId } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [showChecklist, setShowChecklist] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [deviceVerified, setDeviceVerified] = useState(false);
   const { devices, updateDeviceStatus, getNcsByDeviceId, getJobById } = useInspection();
   
   const device = devices.find((d) => d.id === deviceId);
@@ -54,47 +59,79 @@ export default function DeviceDetails() {
     }, 1500);
   };
 
+  const handleScanSuccess = (scannedDeviceId: string) => {
+    setScannerOpen(false);
+    if (scannedDeviceId === deviceId) {
+      setDeviceVerified(true);
+      toast({
+        title: "✅ Device Verified",
+        description: `${device.name} matched successfully. Ready for inspection.`,
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "❌ Wrong Device",
+        description: "Scanned QR does not match this device.",
+      });
+    }
+  };
+
   const openNcs = ncs.filter((nc) => nc.status === "open");
 
   return (
     <div className="min-h-screen bg-background pb-24">
       <Header showBack title={device.name} />
       <main className="container px-4 py-6 space-y-6">
-        {/* Device Image & QR Code Card */}
+        {/* Device Image Card */}
         <Card>
           <CardContent className="p-4">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Device Image */}
-              <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
-                {device.imageUrl ? (
-                  <img
-                    src={device.imageUrl}
-                    alt={device.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-12 h-12 text-muted-foreground" />
-                  </div>
-                )}
-                <div className="absolute top-2 right-2">
-                  <StatusBadge status={device.status} />
+            {/* Device Image */}
+            <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
+              {device.imageUrl ? (
+                <img
+                  src={device.imageUrl}
+                  alt={device.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageIcon className="w-16 h-16 text-muted-foreground" />
                 </div>
+              )}
+              <div className="absolute top-3 right-3">
+                <StatusBadge status={device.status} />
               </div>
+              {deviceVerified && (
+                <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-success/90 text-success-foreground px-2 py-1 rounded-full text-xs font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Verified
+                </div>
+              )}
+            </div>
 
-              {/* QR Code */}
-              <div className="aspect-square rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 flex flex-col items-center justify-center p-4">
-                <QrCode className="w-16 h-16 text-primary mb-2" />
-                <p className="text-xs text-muted-foreground text-center font-mono">
-                  {device.serialNumber}
-                </p>
-                <Button variant="ghost" size="sm" className="mt-2 text-xs">
-                  Scan to Verify
-                </Button>
+            {/* QR Code & Serial */}
+            <div className="flex items-center justify-between mt-4 p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-3">
+                <QrCode className="w-8 h-8 text-primary" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Serial Number</p>
+                  <p className="font-mono font-medium">{device.serialNumber}</p>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Scan to Verify Button */}
+        <Button
+          variant={deviceVerified ? "outline" : "default"}
+          size="lg"
+          className="w-full h-14 gap-3"
+          onClick={() => setScannerOpen(true)}
+        >
+          <QrCode className="w-5 h-5" />
+          {deviceVerified ? "Device Verified ✓ - Scan Again" : "Scan QR to Verify Device"}
+        </Button>
 
         {/* Device Info Card */}
         <Card>
@@ -275,6 +312,15 @@ export default function DeviceDetails() {
           )}
         </Button>
       </main>
+
+      {/* QR Scanner Modal */}
+      <QRScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScanSuccess={handleScanSuccess}
+        expectedDeviceId={device.id}
+        deviceName={device.name}
+      />
 
       {/* Inspection Checklist Modal */}
       <InspectionChecklist
