@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Header } from "@/components/Header";
 import { JobCard } from "@/components/JobCard";
+import { SearchFilter, defaultFilters, FilterState } from "@/components/SearchFilter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("all");
+  const [filters, setFilters] = useState<FilterState>(defaultFilters);
   const { 
     jobs, 
     customers, 
@@ -30,12 +32,50 @@ export default function Dashboard() {
   } = useInspection();
 
   // Get filtered jobs based on selection
-  const filteredJobs = useMemo(() => {
+  const baseJobs = useMemo(() => {
     return getJobsByCustomerAndSite(
       selectedCustomerId || undefined, 
       selectedSiteId || undefined
     );
   }, [selectedCustomerId, selectedSiteId, getJobsByCustomerAndSite]);
+
+  // Apply search and filters
+  const filteredJobs = useMemo(() => {
+    let result = baseJobs;
+
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      result = result.filter((job) =>
+        job.name.toLowerCase().includes(searchLower) ||
+        job.siteName.toLowerCase().includes(searchLower) ||
+        job.customerName.toLowerCase().includes(searchLower) ||
+        job.ncReference?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Status filter
+    if (filters.status !== "all") {
+      result = result.filter((job) => job.status === filters.status);
+    }
+
+    // Priority filter
+    if (filters.priority !== "all") {
+      result = result.filter((job) => job.priority === filters.priority);
+    }
+
+    // Type filter
+    if (filters.type !== "all") {
+      result = result.filter((job) => job.type === filters.type);
+    }
+
+    // Show completed filter
+    if (!filters.showCompleted) {
+      result = result.filter((job) => job.status !== "completed");
+    }
+
+    return result;
+  }, [baseJobs, filters]);
 
   // Categorize jobs by status
   const pendingJobs = filteredJobs.filter((j) => j.status === "not-started");
@@ -61,12 +101,12 @@ export default function Dashboard() {
   };
 
   // Find next due job for display
-  const nextDueJob = filteredJobs
+  const nextDueJob = baseJobs
     .filter((j) => j.status !== "completed")
     .sort((a, b) => new Date(a.nextDueDate).getTime() - new Date(b.nextDueDate).getTime())[0];
 
   // Last inspection from any job
-  const lastInspection = filteredJobs
+  const lastInspection = baseJobs
     .sort((a, b) => new Date(b.lastInspectionDate).getTime() - new Date(a.lastInspectionDate).getTime())[0];
 
   return (
@@ -170,7 +210,7 @@ export default function Dashboard() {
                 <span className="text-xs">Open NCs</span>
               </div>
               <p className="text-lg font-bold text-warning">
-                {filteredJobs.reduce((acc, j) => acc + j.openNCCount, 0)}
+                {baseJobs.reduce((acc, j) => acc + j.openNCCount, 0)}
               </p>
             </CardContent>
           </Card>
@@ -186,14 +226,14 @@ export default function Dashboard() {
               {/* Pending */}
               <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50 border border-border">
                 <Clock className="w-5 h-5 text-muted-foreground mb-1" />
-                <span className="text-2xl font-bold">{pendingJobs.length}</span>
+                <span className="text-2xl font-bold">{baseJobs.filter(j => j.status === "not-started").length}</span>
                 <span className="text-xs text-muted-foreground">Pending</span>
               </div>
 
               {/* In Progress */}
               <div className="flex flex-col items-center p-3 rounded-lg bg-primary/10 border border-primary/30">
                 <PlayCircle className="w-5 h-5 text-primary mb-1" />
-                <span className="text-2xl font-bold text-primary">{inProgressJobs.length}</span>
+                <span className="text-2xl font-bold text-primary">{baseJobs.filter(j => j.status === "in-progress").length}</span>
                 <span className="text-xs text-primary">In Progress</span>
               </div>
 
@@ -201,13 +241,21 @@ export default function Dashboard() {
               <div className="flex flex-col items-center p-3 rounded-lg bg-success/10 border border-success/30">
                 <CheckCircle2 className="w-5 h-5 text-success mb-1" />
                 <span className="text-2xl font-bold text-success">
-                  {filteredJobs.filter((j) => j.status === "completed").length}
+                  {baseJobs.filter((j) => j.status === "completed").length}
                 </span>
                 <span className="text-xs text-success">Completed</span>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Search & Filter */}
+        <SearchFilter
+          value={filters}
+          onChange={setFilters}
+          mode="jobs"
+          placeholder="Search jobs, sites, customers..."
+        />
 
         {/* Jobs Tabs */}
         <div>
@@ -222,14 +270,14 @@ export default function Dashboard() {
               </TabsTrigger>
               <TabsTrigger value="maintenance" className="gap-1.5 text-xs">
                 <Wrench className="w-3.5 h-3.5" />
-                Maintenance
+                Maint
                 <span className="px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-[10px]">
                   {maintenanceJobs.length}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="repair" className="gap-1.5 text-xs">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                Repairs
+                Repair
                 <span className="px-1.5 py-0.5 rounded-full bg-accent/20 text-accent text-[10px]">
                   {repairJobs.length}
                 </span>
@@ -266,7 +314,7 @@ export default function Dashboard() {
               {filteredJobs.filter((j) => j.status !== "completed").length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>All jobs completed!</p>
+                  <p>{filters.search ? "No matching jobs found" : "All jobs completed!"}</p>
                 </div>
               )}
             </TabsContent>
