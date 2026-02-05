@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { DeviceCard } from "@/components/DeviceCard";
 import { ProgressIndicator } from "@/components/ProgressIndicator";
 import { LiveGPSMap } from "@/components/LiveGPSMap";
 import { QRScanner } from "@/components/QRScanner";
+import { SearchFilter, defaultFilters, FilterState } from "@/components/SearchFilter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QrCode, CheckCircle2 } from "lucide-react";
@@ -17,10 +18,44 @@ export default function DeviceList() {
   const { toast } = useToast();
   const { getJobById, getDevicesByJobId, getJobStats } = useInspection();
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    ...defaultFilters,
+    showCompleted: true, // Show all devices by default
+  });
   
   const job = getJobById(jobId || "");
   const devices = getDevicesByJobId(jobId || "");
   const stats = getJobStats(jobId || "");
+
+  // Apply filters to devices
+  const filteredDevices = useMemo(() => {
+    let result = devices;
+
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      result = result.filter((device) =>
+        device.name.toLowerCase().includes(searchLower) ||
+        device.serialNumber.toLowerCase().includes(searchLower) ||
+        device.locationDescription.toLowerCase().includes(searchLower) ||
+        device.type.toLowerCase().includes(searchLower) ||
+        device.building.toLowerCase().includes(searchLower) ||
+        device.zone.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Status filter
+    if (filters.status !== "all") {
+      result = result.filter((device) => device.status === filters.status);
+    }
+
+    // Show completed filter
+    if (!filters.showCompleted) {
+      result = result.filter((device) => device.status === "pending");
+    }
+
+    return result;
+  }, [devices, filters]);
   
   const pendingDevice = devices.find((d) => d.status === "pending");
 
@@ -70,11 +105,25 @@ export default function DeviceList() {
           currentDevice={pendingDevice}
         />
 
+        {/* Search & Filter */}
+        <SearchFilter
+          value={filters}
+          onChange={setFilters}
+          mode="devices"
+          placeholder="Search devices, serial, location..."
+        />
+
         {/* Device List */}
         <div className="space-y-3">
-          {devices.map((device) => (
+          {filteredDevices.map((device) => (
             <DeviceCard key={device.id} device={device} jobId={jobId || ""} />
           ))}
+          
+          {filteredDevices.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>{filters.search ? "No matching devices found" : "No devices"}</p>
+            </div>
+          )}
         </div>
 
         {/* Complete Button */}
