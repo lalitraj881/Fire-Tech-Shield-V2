@@ -202,7 +202,7 @@ export default function AssetCreation() {
     });
 
     setIsSaving(false);
-    navigate("/dashboard");
+    navigate("/home");
   };
 
   return (
