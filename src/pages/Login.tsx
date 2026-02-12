@@ -50,7 +50,7 @@ export default function Login() {
     if (selectedSite) {
       setSelectedSiteId(selectedSite);
     }
-    navigate("/dashboard");
+    navigate("/home");
   };
 
   const handleCustomerChange = (value: string) => {
