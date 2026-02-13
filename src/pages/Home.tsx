@@ -5,6 +5,7 @@ import {
   QrCode, 
   Wrench, 
   History,
+  Plus,
   Building2,
   MapPin,
   Wifi,
@@ -39,6 +40,14 @@ export default function Home() {
       icon: QrCode,
       color: "bg-primary text-primary-foreground",
       fullWidth: true,
+      onClick: () => navigate("/scan"),
+    },
+    {
+      id: "install",
+      label: "Install Device",
+      description: "Register new device",
+      icon: Plus,
+      color: "bg-success text-success-foreground",
       onClick: () => navigate("/scan"),
     },
     {
