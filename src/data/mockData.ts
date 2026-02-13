@@ -64,6 +64,7 @@ export interface Device {
   expiryDate: string;
   status: DeviceStatus;
   jobId: string;
+  installed?: boolean;
 }
 
 export interface InspectionHistory {
@@ -334,6 +335,7 @@ export const mockDevices: Device[] = [
     expiryDate: '2027-01-10',
     status: 'pending',
     jobId: 'job-001',
+    installed: true,
   },
   {
     id: 'dev-002',
@@ -356,6 +358,7 @@ export const mockDevices: Device[] = [
     expiryDate: '2027-01-10',
     status: 'pending',
     jobId: 'job-001',
+    installed: true,
   },
   {
     id: 'dev-003',
@@ -378,6 +381,7 @@ export const mockDevices: Device[] = [
     expiryDate: '2026-06-01',
     status: 'pending',
     jobId: 'job-001',
+    installed: true,
   },
   {
     id: 'dev-004',
@@ -400,6 +404,7 @@ export const mockDevices: Device[] = [
     expiryDate: '2028-01-05',
     status: 'pending',
     jobId: 'job-001',
+    installed: true,
   },
   {
     id: 'dev-005',
@@ -422,6 +427,7 @@ export const mockDevices: Device[] = [
     expiryDate: '2025-09-15',
     status: 'pending',
     jobId: 'job-001',
+    installed: true,
   },
   {
     id: 'dev-006',
@@ -444,6 +450,48 @@ export const mockDevices: Device[] = [
     expiryDate: '2027-05-20',
     status: 'pending',
     jobId: 'job-001',
+    installed: true,
+  },
+  // Unmapped devices (purchased but not yet installed)
+  {
+    id: 'dev-007',
+    name: 'Fire Extinguisher D1',
+    serialNumber: 'FE-2025-001',
+    type: 'ABC Dry Chemical',
+    systemType: 'Fire Suppression',
+    building: '',
+    zone: '',
+    locationDescription: '',
+    manufacturer: 'Kidde',
+    installationDate: '',
+    manufacturingDate: '2025-01-10',
+    purchaseDate: '2025-01-25',
+    warrantyStart: '',
+    warrantyEnd: '2028-01-25',
+    expiryDate: '2030-01-10',
+    status: 'pending',
+    jobId: 'job-001',
+    installed: false,
+  },
+  {
+    id: 'dev-008',
+    name: 'Smoke Detector E1',
+    serialNumber: 'SD-2025-003',
+    type: 'Smoke Detector',
+    systemType: 'Fire Detection',
+    building: '',
+    zone: '',
+    locationDescription: '',
+    manufacturer: 'Honeywell',
+    installationDate: '',
+    manufacturingDate: '2025-02-01',
+    purchaseDate: '2025-02-05',
+    warrantyStart: '',
+    warrantyEnd: '2028-02-05',
+    expiryDate: '2030-02-01',
+    status: 'pending',
+    jobId: 'job-002',
+    installed: false,
   },
 ];
 

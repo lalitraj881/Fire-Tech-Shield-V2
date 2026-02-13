@@ -3,12 +3,10 @@ import { Header } from "@/components/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   QrCode, 
-  Plus, 
-  ClipboardList, 
-  Search, 
-  RefreshCw,
-  MapPin,
+  Wrench, 
+  History,
   Building2,
+  MapPin,
   Wifi,
   WifiOff
 } from "lucide-react";
@@ -17,13 +15,11 @@ import { useState, useEffect } from "react";
 
 export default function Home() {
   const navigate = useNavigate();
-  const { technician, selectedSiteId, sites, getJobsByCustomerAndSite, selectedCustomerId } = useInspection();
+  const { technician, selectedSiteId, sites } = useInspection();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [pendingSyncCount] = useState(0);
 
   const selectedSite = sites.find((s) => s.id === selectedSiteId);
 
-  // Track online status
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -35,52 +31,31 @@ export default function Home() {
     };
   }, []);
 
-  // Get pending task count
-  const jobs = getJobsByCustomerAndSite(selectedCustomerId || undefined, selectedSiteId || undefined);
-  const pendingTaskCount = jobs.filter((j) => j.status !== "completed").length;
-
   const actions = [
     {
       id: "scan",
-      label: "Scan QR",
-      description: "Scan device QR code",
+      label: "Scan Device",
+      description: "Scan QR to view or install",
       icon: QrCode,
       color: "bg-primary text-primary-foreground",
+      fullWidth: true,
       onClick: () => navigate("/scan"),
     },
     {
-      id: "install",
-      label: "Install Device",
-      description: "Register new device",
-      icon: Plus,
-      color: "bg-success text-success-foreground",
-      onClick: () => navigate("/install"),
-    },
-    {
-      id: "tasks",
-      label: "My Tasks",
-      description: `${pendingTaskCount} pending`,
-      icon: ClipboardList,
+      id: "jobs",
+      label: "Maintenance Jobs",
+      description: "Assigned work orders",
+      icon: Wrench,
       color: "bg-warning text-warning-foreground",
-      badge: pendingTaskCount > 0 ? pendingTaskCount : undefined,
       onClick: () => navigate("/tasks"),
     },
     {
-      id: "search",
-      label: "Search Device",
-      description: "Find by name or serial",
-      icon: Search,
-      color: "bg-accent text-accent-foreground",
-      onClick: () => navigate("/search"),
-    },
-    {
-      id: "sync",
-      label: "Sync Status",
-      description: pendingSyncCount > 0 ? `${pendingSyncCount} pending` : "All synced",
-      icon: RefreshCw,
+      id: "history",
+      label: "History",
+      description: "Audit trail & logs",
+      icon: History,
       color: "bg-secondary text-secondary-foreground",
-      badge: pendingSyncCount > 0 ? pendingSyncCount : undefined,
-      onClick: () => navigate("/sync"),
+      onClick: () => navigate("/search"),
     },
   ];
 
@@ -130,12 +105,11 @@ export default function Home() {
           <h2 className="text-2xl font-bold">{technician.name}</h2>
         </div>
 
-        {/* Action Buttons Grid */}
+        {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
           {actions.map((action) => {
             const Icon = action.icon;
-            // Make Scan QR span full width
-            const isFullWidth = action.id === "scan";
+            const isFullWidth = action.fullWidth;
             return (
               <button
                 key={action.id}
@@ -144,13 +118,8 @@ export default function Home() {
               >
                 <Card className="border-border hover:border-primary/50 transition-all duration-200 active:scale-[0.98]">
                   <CardContent className={`p-6 flex ${isFullWidth ? "flex-row items-center gap-5" : "flex-col items-center gap-3"} text-center`}>
-                    <div className={`${action.color} ${isFullWidth ? "w-16 h-16" : "w-14 h-14"} rounded-2xl flex items-center justify-center relative`}>
+                    <div className={`${action.color} ${isFullWidth ? "w-16 h-16" : "w-14 h-14"} rounded-2xl flex items-center justify-center`}>
                       <Icon className={`${isFullWidth ? "w-8 h-8" : "w-7 h-7"}`} />
-                      {action.badge && (
-                        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full text-[10px] font-bold flex items-center justify-center">
-                          {action.badge}
-                        </span>
-                      )}
                     </div>
                     <div className={isFullWidth ? "text-left" : ""}>
                       <p className={`font-semibold ${isFullWidth ? "text-lg" : "text-sm"}`}>{action.label}</p>

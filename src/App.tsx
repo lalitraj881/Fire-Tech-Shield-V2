@@ -36,7 +36,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/home" element={<Home />} />
               <Route path="/scan" element={<ScanDevice />} />
-              <Route path="/install" element={<AssetCreation />} />
+              <Route path="/install/:deviceId" element={<AssetCreation />} />
               <Route path="/device/:deviceId" element={<DeviceHub />} />
               <Route path="/device/:deviceId/relocate" element={<RelocateDevice />} />
               <Route path="/device/:deviceId/history" element={<DeviceHistoryPage />} />
