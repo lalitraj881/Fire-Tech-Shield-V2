@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -39,42 +39,111 @@ export default function DeviceHub() {
   const location = useLocation();
   const { toast } = useToast();
   // Call useInspection only once
-  const { getDeviceById, updateDeviceStatus, getNcsByDeviceId, jobs, submitInspectionResults } = useInspection();
+  const { getDeviceById, updateDeviceStatus, getNcsByDeviceId, jobs, submitInspectionResults, loadJobDetails, getAssignedJobs } = useInspection();
   
+  // Fetch logic
+  const [loading, setLoading] = useState(false);
+  const [fetchedDevice, setFetchedDevice] = useState<Device | null>(null);
+
   // Try to get device from Context OR Navigation State (passed from Scan)
-  let device: Device | undefined = getDeviceById(deviceId || "");
-  
-  // If not in context, check if we got data from the API scan
-  if (!device && location.state?.apiData) {
-    const apiData = location.state.apiData;
-    // Map API data to Device interface temporarily for display
-    device = {
-      id: apiData.name, // The API returns 'name' as the ID
-      name: apiData.item_code || apiData.name, // Use item_code as name if available
-      serialNumber: apiData.serial_no || "N/A",
-      type: apiData.device_type || "Unknown",
-      systemType: apiData.system_type || "Unknown",
-      manufacturer: apiData.brand || "Unknown",
-      locationDescription: apiData.location || "",
-      building:  "", // Not in API data shown so far
+  // OR use the fetched device if available
+  let device: Device | undefined = getDeviceById(deviceId || "") || (location.state?.apiData ? {
+      id: location.state.apiData.name,
+      name: location.state.apiData.item_code || location.state.apiData.name,
+      serialNumber: location.state.apiData.serial_no || "N/A",
+      type: location.state.apiData.device_type || "Unknown",
+      systemType: location.state.apiData.system_type || "Unknown",
+      manufacturer: location.state.apiData.brand || "Unknown",
+      locationDescription: location.state.apiData.location || "",
+      building:  "", 
       zone: "",
-      jobId: "external-scan", // Placeholder
+      jobId: "external-scan", 
       status: "pending", 
-      isVerified: true, // We just scanned it
-      installationDate: apiData.installation_date,
-      purchaseDate: apiData.purchase_date,
-      expiryDate: apiData.expiry_date,
-      warrantyEnd: apiData.warranty_expiry_date,
-      imageUrl: apiData.image,
+      isVerified: true, 
+      installationDate: location.state.apiData.installation_date,
+      purchaseDate: location.state.apiData.purchase_date,
+      expiryDate: location.state.apiData.expiry_date,
+      warrantyEnd: location.state.apiData.warranty_expiry_date,
+      imageUrl: location.state.apiData.image,
       gpsLat: 0,
       gpsLng: 0,
       manufacturingDate: "",
       warrantyStart: ""
+  } : undefined) || fetchedDevice || undefined;
+
+  // Effect to load data if missing
+  // 1. If we have a jobId in URL but no device -> Load Job Details
+  // 2. If we DON'T have a jobId (scan) but have deviceId -> Fetch Device Details directly
+  
+  // Extract jobId from URL path manually since it might not be in params if route is /device/:id
+  // But wait, the route /job/:jobId/device/:deviceId matches.
+  const { jobId } = useParams(); // This will differ based on route
+
+  useEffect(() => {
+    const loadData = async () => {
+      // If we already have the device from context, no need to fetch
+      if (getDeviceById(deviceId || "")) return;
+
+      setLoading(true);
+      try {
+        if (jobId) {
+            // Case 1: Accessed via Job Route -> Load Job Context
+             await loadJobDetails(jobId);
+        } else if (deviceId) {
+            // Case 2: Accessed via Direct Device Route / Scan -> Fetch Single Device + Find Active Job
+            const { fetchDevice } = await import("@/services/deviceService");
+            const result = await fetchDevice(deviceId);
+            
+            if (result) {
+                const { device, customerId } = result;
+                setFetchedDevice(device);
+                
+                // If we found the device, let's try to find an active job for it
+                if (customerId && device.siteId) {
+                  try {
+                    // Assuming getAssignedJobs is available in scope (destructured above)
+                    const jobList = await getAssignedJobs(customerId, device.siteId);
+                    
+                    // Find the best candidate job
+                    // Priority: In Progress > Not Started > Completed
+                    const activeJob = jobList.find(j => j.status === 'in-progress') 
+                                   || jobList.find(j => j.status === 'not-started')
+                                   || jobList[0];
+                                   
+                    if (activeJob) {
+                      console.log("Found active job for scanned device:", activeJob.id);
+                      // Load full details for this job (checklists, etc.)
+                      await loadJobDetails(activeJob.id);
+                      
+                      // Update the fetched device's jobId so the UI links it correctly
+                      setFetchedDevice({ ...device, jobId: activeJob.id });
+                    }
+                  } catch (jobError) {
+                    console.error("Failed to find active job for device", jobError);
+                  }
+                }
+            }
+        }
+      } catch (error) {
+        console.error("Failed to load device data", error);
+        toast({
+            title: "Error",
+            description: "Failed to load device details from server.",
+            variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
     };
-  }
+
+    // Only run if we don't have device data yet
+    if (!device && deviceId) {
+        loadData();
+    }
+  }, [deviceId, jobId, getDeviceById, toast, loadJobDetails, getAssignedJobs]); // Added dependencies
 
   const ncs = getNcsByDeviceId(deviceId || "");
-  const deviceJob = jobs.find((j) => j.id === device?.jobId);
+  const deviceJob = jobs.find((j) => j.id === (jobId || device?.jobId));
   console.log('device', device);
   console.log('ncs', ncs);
   console.log('deviceJob', deviceJob);
@@ -85,10 +154,19 @@ export default function DeviceHub() {
   const [missingNote, setMissingNote] = useState("");
   const [missingPhoto, setMissingPhoto] = useState(false);
 
+  if (loading) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center flex-col gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <p className="text-muted-foreground">Loading device details...</p>
+        </div>
+      );
+  }
+
   if (!device) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center flex-col gap-4">
-        <p className="text-muted-foreground">Device not found in local database.</p>
+        <p className="text-muted-foreground">Device not found.</p>
         <Button variant="outline" onClick={() => navigate("/scan")}>
           Scan Another
         </Button>
