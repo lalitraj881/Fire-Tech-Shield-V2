@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -13,229 +16,516 @@ import {
 import { 
   Camera, 
   MapPin, 
+  QrCode, 
+  Printer, 
+  Save, 
+  AlertCircle,
   CheckCircle2,
   Loader2,
-  Save,
-  Image as ImageIcon
+  Factory,
+  Calendar
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useInspection } from "@/context/InspectionContext";
 import { cn } from "@/lib/utils";
 
-const zones = ["Zone A", "Zone B", "Zone C", "Zone D"];
-const floors = ["Ground Floor", "Floor 1", "Floor 2", "Floor 3", "Basement"];
-const rooms = ["Production Hall", "Server Room", "Cafeteria", "Loading Dock", "Office", "Warehouse", "Assembly Line", "Entrance"];
+interface AssetFormData {
+  name: string;
+  type: string;
+  systemType: string;
+  manufacturer: string;
+  serialNumber: string;
+  locationDescription: string;
+  gpsLat: number | null;
+  gpsLng: number | null;
+  installationDate: string;
+  purchaseDate: string;
+  manufacturingDate: string;
+  warrantyEndDate: string;
+  photo: boolean;
+}
+
+const deviceTypes = [
+  "ABC Dry Chemical",
+  "CO2",
+  "Water Mist",
+  "Foam",
+  "Clean Agent",
+  "Wet Chemical",
+];
+
+const systemTypes = [
+  "Fire Suppression",
+  "Fire Detection",
+  "Emergency Lighting",
+  "Sprinkler System",
+  "Fire Alarm",
+];
 
 export default function AssetCreation() {
-  const { deviceId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
-  const { devices, technician } = useInspection();
+  const { selectedCustomerId, selectedSiteId, sites } = useInspection();
+  
+  const selectedSite = sites.find((s) => s.id === selectedSiteId);
 
-  const device = devices.find((d) => d.id === deviceId);
+  const [formData, setFormData] = useState<AssetFormData>({
+    name: "",
+    type: "",
+    systemType: "",
+    manufacturer: "",
+    serialNumber: "",
+    locationDescription: "",
+    gpsLat: null,
+    gpsLng: null,
+    installationDate: new Date().toISOString().split("T")[0],
+    purchaseDate: "",
+    manufacturingDate: "",
+    warrantyEndDate: "",
+    photo: false,
+  });
 
-  const [photo, setPhoto] = useState(false);
-  const [zone, setZone] = useState("");
-  const [floor, setFloor] = useState("");
-  const [room, setRoom] = useState("");
-  const [gpsLat, setGpsLat] = useState<number | null>(null);
-  const [gpsLng, setGpsLng] = useState<number | null>(null);
+  const [generatedId, setGeneratedId] = useState<string>("");
   const [gpsLoading, setGpsLoading] = useState(true);
+  const [qrGenerated, setQrGenerated] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [cameraOpen, setCameraOpen] = useState(true);
+  const [isPreFilled, setIsPreFilled] = useState(false);
+
+  // Pre-fill from API data if available
+  useEffect(() => {
+    if (location.state?.apiData) {
+      const data = location.state.apiData;
+      console.log("Pre-filling asset from API:", data);
+      
+      setFormData(prev => ({
+        ...prev,
+        name: data.name || prev.name,
+        // For dropdowns, we only set if it matches one of our options or we accept raw text
+        // For now, setting raw text might break Select if not in list, so we might need to handle custom input
+        // But for this demo, let's try to map or set it.
+        // If data.device_type matches the ID from dropdown, we need the name.
+        // Assuming API sends "ABC Dry Chemical" or similar names? The JSON shows IDs like "0uvrgjou48".
+        // If IDs are used, we can't map to names without a dictionary. Leaving type blank for user to select if it's an ID.
+        type: "", 
+        systemType: "",
+        manufacturer: data.manufacturer === "1" ? "" : (data.manufacturer || ""), 
+        serialNumber: data.serial_number === "1" ? "" : (data.serial_number || ""),
+        locationDescription: data.location || "",
+        purchaseDate: data.purchase_date || "",
+        installationDate: data.installation_date || prev.installationDate,
+        warrantyEndDate: data.warranty_end_date || "",
+        manufacturingDate: "", // API doesn't seem to have direct manufacturing date in example
+      }));
+
+      if (data.name) {
+        setGeneratedId(data.name);
+        setIsPreFilled(true);
+        setQrGenerated(true); // Assume if it came from a scan, QR exists
+      }
+    }
+  }, [location.state]);
+
+  // Auto-generate device ID (only if not pre-filled)
+  useEffect(() => {
+    if (!isPreFilled && formData.type) {
+      const prefix = formData.type ? formData.type.substring(0, 2).toUpperCase() : "XX";
+      const timestamp = Date.now().toString().slice(-6);
+      setGeneratedId(`FTS-${prefix}-${timestamp}`);
+    }
+  }, [formData.type, isPreFilled]);
 
   // Auto-capture GPS
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setGpsLat(pos.coords.latitude);
-          setGpsLng(pos.coords.longitude);
+        (position) => {
+          setFormData((prev) => ({
+            ...prev,
+            gpsLat: position.coords.latitude,
+            gpsLng: position.coords.longitude,
+          }));
           setGpsLoading(false);
         },
-        () => {
+        (error) => {
+          console.error("GPS error:", error);
           setGpsLoading(false);
-          // Simulate GPS for demo
-          setGpsLat(42.3314 + Math.random() * 0.01);
-          setGpsLng(-83.0458 + Math.random() * 0.01);
+          toast({
+            title: "GPS not available",
+            description: "Please enter location manually",
+            variant: "destructive",
+          });
         }
       );
     } else {
       setGpsLoading(false);
-      setGpsLat(42.3314);
-      setGpsLng(-83.0458);
     }
-  }, []);
+  }, [toast]);
 
-  // Auto-open camera simulation
+  // Prevent accidental page refresh
   useEffect(() => {
-    if (cameraOpen) {
-      const timer = setTimeout(() => setCameraOpen(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [cameraOpen]);
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (formData.name || formData.type) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [formData]);
 
-  const handleCapture = () => {
-    setPhoto(true);
-    toast({ title: "📸 Photo captured" });
+  const handlePhotoCapture = () => {
+    setFormData((prev) => ({ ...prev, photo: true }));
+    toast({
+      title: "Photo captured",
+      description: "Device photo has been attached.",
+    });
   };
 
-  const isValid = photo && zone && floor && room;
+  const handleGenerateQR = () => {
+    if (!formData.name || !formData.type) {
+      toast({
+        title: "Missing information",
+        description: "Please fill in device name and type first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setQrGenerated(true);
+    toast({
+      title: "QR Code Generated",
+      description: `QR code for ${generatedId} is ready.`,
+    });
+  };
+
+  const handlePrintQR = () => {
+    toast({
+      title: "Print QR Code",
+      description: "Opening print dialog for QR label...",
+    });
+    // In production, this would trigger actual printing
+    window.print();
+  };
+
+  const isFormValid = () => {
+    return (
+      formData.name.trim() !== "" &&
+      formData.type !== "" &&
+      formData.systemType !== "" &&
+      formData.locationDescription.trim() !== "" &&
+      formData.manufacturer.trim() !== "" &&
+      formData.installationDate !== "" &&
+      formData.photo
+    );
+  };
 
   const handleSave = async () => {
-    if (!isValid) return;
-    setIsSaving(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    toast({
-      title: "✅ Device Installed",
-      description: `${device?.name || "Device"} installed at ${zone}, ${floor}, ${room}`,
-    });
-    setIsSaving(false);
-    navigate("/home");
-  };
+    if (!isFormValid()) {
+      toast({
+        title: "Incomplete form",
+        description: "Please fill in all required fields and capture a photo.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  if (!device) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Device not found</p>
-      </div>
-    );
-  }
+    setIsSaving(true);
+    
+    // Simulate save
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    
+    toast({
+      title: "Asset Created Successfully",
+      description: `Device ${generatedId} has been registered.`,
+    });
+
+    setIsSaving(false);
+    navigate("/dashboard");
+  };
 
   return (
     <div className="min-h-screen bg-background pb-8">
-      <Header showBack title="Install Device" />
-      <main className="container px-4 py-6 space-y-5">
-        {/* Device Info Summary */}
-        <Card className="border-primary/20">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-              <ImageIcon className="w-6 h-6 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold truncate">{device.name}</p>
-              <p className="text-sm text-muted-foreground">{device.type} · {device.serialNumber}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Step 1 — Photo Capture */}
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm font-medium text-muted-foreground mb-3">Step 1 — Capture Photo</p>
-            {!photo ? (
-              <button
-                onClick={handleCapture}
-                className="w-full aspect-video rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 flex flex-col items-center justify-center gap-3 active:scale-[0.98] transition-transform"
-              >
-                <Camera className="w-12 h-12 text-primary" />
-                <p className="font-medium text-primary">Tap to Capture Photo</p>
-                <p className="text-xs text-muted-foreground">Camera opens automatically</p>
-              </button>
-            ) : (
-              <div className="w-full aspect-video rounded-xl bg-muted flex items-center justify-center relative">
-                <div className="text-center">
-                  <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-2" />
-                  <p className="text-success font-medium">Photo Captured</p>
+      <Header showBack title="Register New Asset" />
+      
+      <main className="container px-4 py-6 space-y-6">
+        {/* Site Context */}
+        {selectedSite && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Factory className="w-5 h-5 text-primary" />
+                <div>
+                  <p className="font-medium">{selectedSite.name}</p>
+                  <p className="text-sm text-muted-foreground">{selectedSite.address}</p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="absolute bottom-3 right-3"
-                  onClick={() => setPhoto(false)}
-                >
-                  Retake
-                </Button>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Step 2 — Location Selection */}
+        {/* Auto-Generated Device ID */}
         <Card>
-          <CardContent className="p-4 space-y-4">
-            <p className="text-sm font-medium text-muted-foreground">Step 2 — Select Location</p>
-            <div className="space-y-3">
-              <Select value={zone} onValueChange={setZone}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Select Zone" />
-                </SelectTrigger>
-                <SelectContent>
-                  {zones.map((z) => (
-                    <SelectItem key={z} value={z}>{z}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={floor} onValueChange={setFloor}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Select Floor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {floors.map((f) => (
-                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={room} onValueChange={setRoom}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Select Room" />
-                </SelectTrigger>
-                <SelectContent>
-                  {rooms.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Device ID (Auto-generated)</p>
+                <p className="text-xl font-mono font-bold text-primary">{generatedId}</p>
+              </div>
+              <CheckCircle2 className="w-6 h-6 text-success" />
             </div>
           </CardContent>
         </Card>
 
-        {/* Step 3 — GPS Auto */}
+        {/* Device Basic Info */}
         <Card>
-          <CardContent className="p-4">
-            <p className="text-sm font-medium text-muted-foreground mb-3">Step 3 — GPS Location</p>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Device Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Device Name *</Label>
+              <Input
+                id="name"
+                placeholder="e.g., Fire Extinguisher A1"
+                value={formData.name}
+                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Device Type *</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deviceTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>System Type *</Label>
+                <Select
+                  value={formData.systemType}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, systemType: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select system" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {systemTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manufacturer">Manufacturer *</Label>
+              <Input
+                id="manufacturer"
+                placeholder="e.g., Kidde, Amerex"
+                value={formData.manufacturer}
+                onChange={(e) => setFormData((prev) => ({ ...prev, manufacturer: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="serial">Serial Number</Label>
+              <Input
+                id="serial"
+                placeholder="Manufacturer serial number"
+                value={formData.serialNumber}
+                onChange={(e) => setFormData((prev) => ({ ...prev, serialNumber: e.target.value }))}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Location */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-primary" />
+              Location
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="location">Physical Location *</Label>
+              <Textarea
+                id="location"
+                placeholder="e.g., Building A - Floor 2 - Near Exit Door"
+                value={formData.locationDescription}
+                onChange={(e) => setFormData((prev) => ({ ...prev, locationDescription: e.target.value }))}
+                rows={2}
+              />
+            </div>
+
             <div className="p-3 rounded-lg bg-muted/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MapPin className={cn("w-5 h-5", gpsLoading ? "text-muted-foreground" : "text-success")} />
+                <MapPin className={cn("w-4 h-4", gpsLoading ? "text-muted-foreground" : "text-success")} />
                 <span className="text-sm">
                   {gpsLoading ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="w-3 h-3 animate-spin" />
                       Acquiring GPS...
                     </span>
-                  ) : gpsLat && gpsLng ? (
-                    `${gpsLat.toFixed(6)}, ${gpsLng.toFixed(6)}`
+                  ) : formData.gpsLat && formData.gpsLng ? (
+                    `${formData.gpsLat.toFixed(6)}, ${formData.gpsLng.toFixed(6)}`
                   ) : (
                     "GPS not available"
                   )}
                 </span>
               </div>
-              {gpsLat && !gpsLoading && <CheckCircle2 className="w-5 h-5 text-success" />}
+              {formData.gpsLat && <CheckCircle2 className="w-4 h-4 text-success" />}
             </div>
           </CardContent>
         </Card>
 
-        {/* Auto-filled info */}
-        <Card className="border-muted">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs text-muted-foreground font-medium">Auto-captured</p>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="text-muted-foreground">Technician</div>
-              <div className="font-medium">{technician.name}</div>
-              <div className="text-muted-foreground">Timestamp</div>
-              <div className="font-medium">{new Date().toLocaleString()}</div>
+        {/* Dates */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Important Dates
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Installation Date *</Label>
+                <Input
+                  type="date"
+                  value={formData.installationDate}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, installationDate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Purchase Date</Label>
+                <Input
+                  type="date"
+                  value={formData.purchaseDate}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, purchaseDate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Manufacturing Date</Label>
+                <Input
+                  type="date"
+                  value={formData.manufacturingDate}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, manufacturingDate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Warranty End Date</Label>
+                <Input
+                  type="date"
+                  value={formData.warrantyEndDate}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, warrantyEndDate: e.target.value }))}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Save */}
+        {/* Photo & QR */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Photo & QR Code</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Photo Capture */}
+            <div className="flex items-center justify-between p-4 rounded-lg border border-dashed">
+              <div className="flex items-center gap-3">
+                <Camera className={cn("w-8 h-8", formData.photo ? "text-success" : "text-muted-foreground")} />
+                <div>
+                  <p className="font-medium">Device Photo *</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formData.photo ? "Photo captured" : "Required"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant={formData.photo ? "outline" : "default"}
+                size="sm"
+                onClick={handlePhotoCapture}
+              >
+                {formData.photo ? "Retake" : "Capture"}
+              </Button>
+            </div>
+
+            {/* QR Code Generation */}
+            <div className="p-4 rounded-lg border space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <QrCode className={cn("w-8 h-8", qrGenerated ? "text-primary" : "text-muted-foreground")} />
+                  <div>
+                    <p className="font-medium">QR Code</p>
+                    <p className="text-sm text-muted-foreground">
+                      {qrGenerated ? "Ready to print" : "Generate after filling details"}
+                    </p>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleGenerateQR} disabled={qrGenerated}>
+                  Generate
+                </Button>
+              </div>
+
+              {qrGenerated && (
+                <div className="flex items-center justify-center gap-4 p-4 bg-muted/30 rounded-lg">
+                  <div className="w-24 h-24 bg-white rounded-lg flex items-center justify-center p-2">
+                    <QrCode className="w-full h-full text-black" />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <p className="font-mono text-sm">{generatedId}</p>
+                    <Button size="sm" onClick={handlePrintQR}>
+                      <Printer className="w-4 h-4 mr-2" />
+                      Print QR Label
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Validation Warning */}
+        {!isFormValid() && (
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-warning/10 border border-warning/30">
+            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-warning">Complete all required fields</p>
+              <ul className="text-muted-foreground mt-1 list-disc list-inside">
+                {!formData.name && <li>Device Name</li>}
+                {!formData.type && <li>Device Type</li>}
+                {!formData.systemType && <li>System Type</li>}
+                {!formData.manufacturer && <li>Manufacturer</li>}
+                {!formData.locationDescription && <li>Physical Location</li>}
+                {!formData.photo && <li>Device Photo</li>}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Save Button */}
         <Button
           size="lg"
           className="w-full h-14"
           onClick={handleSave}
-          disabled={!isValid || isSaving}
+          disabled={!isFormValid() || isSaving}
         >
           {isSaving ? (
             <>
@@ -245,7 +535,7 @@ export default function AssetCreation() {
           ) : (
             <>
               <Save className="w-5 h-5 mr-2" />
-              Save Installation
+              Register Asset
             </>
           )}
         </Button>

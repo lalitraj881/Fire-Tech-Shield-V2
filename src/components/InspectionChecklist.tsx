@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Camera, AlertTriangle, CheckCircle2, XCircle, AlertCircle, Info, MapPin } from "lucide-react";
-import { mockChecklistItems, type ChecklistItem, type InspectionSeverity, type Device } from "@/data/mockData";
+import { Camera, AlertTriangle, CheckCircle2, XCircle, AlertCircle, Info, MapPin, Image as ImageIcon } from "lucide-react";
+import { type ChecklistItem, type InspectionSeverity, type Device } from "@/types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useInspection } from "@/context/InspectionContext";
@@ -21,7 +21,7 @@ interface InspectionChecklistProps {
   onOpenChange: (open: boolean) => void;
   device: Device;
   jobId: string;
-  onComplete: (result: "pass" | "fail", severity: InspectionSeverity) => void;
+  onComplete: (result: "pass" | "fail", severity: InspectionSeverity, results?: any[]) => void;
 }
 
 interface ChecklistItemState {
@@ -74,27 +74,41 @@ export function InspectionChecklist({
   onComplete,
 }: InspectionChecklistProps) {
   const { toast } = useToast();
-  const { createNC, getJobById, technician } = useInspection();
+  const { getJobById, technician, checklists } = useInspection();
   const job = getJobById(jobId);
 
-  const [checklistState, setChecklistState] = useState<ChecklistState>(() => {
-    const initial: ChecklistState = {};
-    mockChecklistItems.forEach((item) => {
-      initial[item.id] = {
-        value: item.type === "toggle" ? true : item.type === "numeric" ? 0 : "",
-        result: null,
-      };
-    });
-    return initial;
-  });
+  // Get checklists for this specific device
+  const currentChecklistItems = checklists[device.id] || [];
 
+  const [checklistState, setChecklistState] = useState<ChecklistState>({});
   const [failedItemNotes, setFailedItemNotes] = useState<{ [key: string]: string }>({});
   const [failedItemPhotos, setFailedItemPhotos] = useState<{ [key: string]: boolean }>({});
+  const [failedItemPhotoFiles, setFailedItemPhotoFiles] = useState<{ [key: string]: string }>({});
   const [deviceLocation, setDeviceLocation] = useState(device.locationDescription);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [showPhotoOptions, setShowPhotoOptions] = useState<string | null>(null);
+
+  // Initialize state when items or open changes
+  useEffect(() => {
+    if (open && currentChecklistItems.length > 0) {
+       setChecklistState(prev => {
+          // If already initialized for these items, don't overwrite
+          if (Object.keys(prev).length > 0) return prev; 
+          
+          const initial: ChecklistState = {};
+          currentChecklistItems.forEach((item) => {
+            initial[item.id] = {
+              value: item.type === "toggle" ? true : item.type === "numeric" ? 0 : "",
+              result: null,
+            };
+          });
+          return initial;
+       });
+    }
+  }, [open, currentChecklistItems]);
 
   const getFailedItems = () => {
-    return mockChecklistItems.filter((item) => {
+    return currentChecklistItems.filter((item) => {
       const state = checklistState[item.id];
       return state?.result && state.result !== "pass";
     });
@@ -112,20 +126,19 @@ export function InspectionChecklist({
 
   const canSubmit = () => {
     // Check all required items have results
-    const allRequiredComplete = mockChecklistItems
+    const allRequiredComplete = currentChecklistItems
       .filter((item) => item.required)
       .every((item) => checklistState[item.id]?.result !== null);
 
-    // Check failed items have photos and notes
+    // Check failed items have required evidence
     const failedItems = getFailedItems();
-    const allFailedHaveEvidence = failedItems.every(
-      (item) => failedItemPhotos[item.id] && failedItemNotes[item.id]?.trim()
-    );
+    const allFailedHaveEvidence = failedItems.every((item) => {
+      const hasPhoto = !item.requiresPhoto || failedItemPhotos[item.id];
+      const hasNotes = !item.requiresDescription || failedItemNotes[item.id]?.trim();
+      return hasPhoto && hasNotes;
+    });
 
-    // Device location must be confirmed
-    const hasLocation = deviceLocation.trim().length > 0;
-
-    return allRequiredComplete && (failedItems.length === 0 || allFailedHaveEvidence) && hasLocation;
+    return allRequiredComplete && (failedItems.length === 0 || allFailedHaveEvidence);
   };
 
   const handleSeveritySelect = (item: ChecklistItem, severity: InspectionSeverity) => {
@@ -152,60 +165,129 @@ export function InspectionChecklist({
     }));
   };
 
-  const handlePhotoCapture = (itemId: string) => {
+  const handlePhotoCapture = async (itemId: string) => {
     if (isReadOnly) return;
-    setFailedItemPhotos((prev) => ({ ...prev, [itemId]: true }));
-    toast({
-      title: "Photo captured",
-      description: "Evidence photo has been attached.",
-    });
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+
+      // Wait for video to be ready
+      await new Promise((resolve) => {
+        video.onloadedmetadata = resolve;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(video, 0, 0);
+
+      // Stop the stream
+      stream.getTracks().forEach(track => track.stop());
+
+      // Convert to base64
+      const photoData = canvas.toDataURL('image/jpeg', 0.8);
+      
+      setFailedItemPhotos((prev) => ({ ...prev, [itemId]: true }));
+      setFailedItemPhotoFiles((prev) => ({ ...prev, [itemId]: photoData }));
+      setShowPhotoOptions(null);
+      
+      toast({
+        title: "Photo captured",
+        description: "Camera photo has been attached.",
+      });
+    } catch (error) {
+      console.error('Camera error:', error);
+      toast({
+        title: "Camera Error",
+        description: "Could not access camera. Please try uploading from device.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSubmit = () => {
+  const handleFileUpload = (itemId: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly) return;
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const photoData = reader.result as string;
+        setFailedItemPhotos((prev) => ({ ...prev, [itemId]: true }));
+        setFailedItemPhotoFiles((prev) => ({ ...prev, [itemId]: photoData }));
+        setShowPhotoOptions(null);
+        
+        toast({
+          title: "Photo uploaded",
+          description: "Evidence photo has been attached.",
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Helper to convert data URL to Blob
+  const dataURItoBlob = (dataURI: string) => {
+    try {
+        const byteString = atob(dataURI.split(',')[1]);
+        const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], {type: mimeString});
+    } catch (e) {
+        console.error("Error converting data URI to blob", e);
+        return null;
+    }
+  };
+
+  const handleSubmit = async () => {
     const overallSeverity = getOverallSeverity();
     const overallResult = overallSeverity === "pass" ? "pass" : "fail";
 
-    // Create NC if there are failures
-    if (hasFailures && job) {
-      const failedItems = getFailedItems();
-      createNC({
-        deviceId: device.id,
-        deviceName: device.name,
-        deviceType: device.type,
-        deviceSystemType: device.systemType,
-        deviceImageUrl: device.imageUrl,
-        deviceLocationDescription: deviceLocation,
-        deviceGpsLat: device.gpsLat,
-        deviceGpsLng: device.gpsLng,
-        jobId: job.id,
-        customerId: job.customerId,
-        customerName: job.customerName,
-        siteId: job.siteId,
-        siteName: job.siteName,
-        siteAddress: job.siteAddress,
-        siteGpsLat: job.siteGpsLat,
-        siteGpsLng: job.siteGpsLng,
-        severity: overallSeverity,
-        description: failedItems.map((i) => i.name).join(", "),
-        failedChecklistItems: failedItems.map((i) => i.name),
-        technicianRemarks: Object.values(failedItemNotes).join("; "),
-        photoEvidence: Object.keys(failedItemPhotos).filter((k) => failedItemPhotos[k]).map((k) => `photo-${k}.jpg`),
-        inspectionJobId: job.id,
+    // Gather Results
+    const results = currentChecklistItems.map((item) => {
+        const state = checklistState[item.id];
+        const photoData = failedItemPhotoFiles[item.id];
+        const photoBlob = photoData ? dataURItoBlob(photoData) : null;
+        
+        return {
+            itemId: item.id,
+            question: item.name,
+            value: state?.value,
+            result: state?.result || "pass",
+            notes: failedItemNotes[item.id],
+            photoFile: photoBlob,
+            minValue: item.minValue,
+            maxValue: item.maxValue,
+            requiresPhoto: item.requiresPhoto,
+            requiresDescription: item.requiresDescription
+        };
+    });
+
+    try {
+      setIsReadOnly(true);
+      // Pass the collected results to parent
+      onComplete(overallResult, overallSeverity, results);
+      onOpenChange(false);
+
+      toast({
+        title: overallResult === "pass" ? "Inspection Passed" : "Inspection Completed with Issues",
+        description: "Submitting results...",
+        variant: overallResult === "pass" ? "default" : "destructive",
+      });
+    } catch (e) {
+      console.error("Submission prep failed", e);
+      toast({
+        title: "Error",
+        description: "Could not prepare inspection results.",
+        variant: "destructive",
       });
     }
-
-    setIsReadOnly(true);
-    onComplete(overallResult, overallSeverity);
-    onOpenChange(false);
-
-    toast({
-      title: overallResult === "pass" ? "Inspection Passed" : "Inspection Completed with Issues",
-      description:
-        overallResult === "pass"
-          ? "All checks completed successfully."
-          : `${getFailedItems().length} item(s) have issues. NC created automatically.`,
-      variant: overallResult === "pass" ? "default" : "destructive",
-    });
   };
 
   return (
@@ -218,7 +300,7 @@ export function InspectionChecklist({
               <span className="text-xs bg-muted px-2 py-1 rounded">Read Only</span>
             )}
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">{device.name}</p>
+          <p className="text-sm text-muted-foreground break-words">{device.name}</p>
         </DialogHeader>
 
         {/* Device Location Confirmation */}
@@ -228,20 +310,22 @@ export function InspectionChecklist({
             <span>Device Location (Mandatory)</span>
           </div>
           <Textarea
-            placeholder="Confirm or update device location..."
             value={deviceLocation}
-            onChange={(e) => setDeviceLocation(e.target.value)}
-            className="text-sm"
+            className="text-sm bg-muted/50"
             rows={2}
-            disabled={isReadOnly}
+            readOnly
           />
+
           <p className="text-xs text-muted-foreground">
             GPS: {device.gpsLat?.toFixed(4)}, {device.gpsLng?.toFixed(4)}
           </p>
         </div>
 
         <div className="space-y-4 py-4">
-          {mockChecklistItems.map((item) => {
+          {currentChecklistItems.length === 0 ? (
+             <div className="text-center p-4 text-muted-foreground">No checklist items found for this device.</div>
+          ) : (
+             currentChecklistItems.map((item) => {
             const state = checklistState[item.id];
             const config = state?.result ? severityConfig[state.result] : null;
 
@@ -347,22 +431,51 @@ export function InspectionChecklist({
                       <span className="font-medium">Photo & remarks required</span>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <Button
-                        type="button"
-                        variant={failedItemPhotos[item.id] ? "default" : "outline"}
-                        size="sm"
-                        className={cn(failedItemPhotos[item.id] && "bg-success hover:bg-success/90")}
-                        onClick={() => handlePhotoCapture(item.id)}
-                        disabled={isReadOnly}
-                      >
-                        <Camera className="w-4 h-4 mr-1.5" />
-                        {failedItemPhotos[item.id] ? "Photo Attached" : "Capture Photo"}
-                      </Button>
-                      {!failedItemPhotos[item.id] && (
+                    {failedItemPhotos[item.id] ? (
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-4 p-3 border rounded-lg bg-muted/30">
+                          {failedItemPhotoFiles[item.id] && (
+                            <div className="relative w-32 h-24 rounded-md overflow-hidden border border-border bg-background">
+                              <img 
+                                src={failedItemPhotoFiles[item.id]} 
+                                alt="Evidence" 
+                                className="w-full h-full object-cover" 
+                              />
+                            </div>
+                          )}
+                          <div className="flex flex-col gap-2">
+                            <span className="text-sm font-medium text-success flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4" />
+                              Photo Attached
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handlePhotoCapture(item.id)}
+                              disabled={isReadOnly}
+                            >
+                              <Camera className="w-4 h-4 mr-1.5" />
+                              Re-Capture
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePhotoCapture(item.id)}
+                          disabled={isReadOnly}
+                        >
+                          <Camera className="w-4 h-4 mr-1.5" />
+                          Capture Photo
+                        </Button>
                         <span className="text-xs text-destructive">Required</span>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     <div>
                       <Textarea
@@ -386,7 +499,8 @@ export function InspectionChecklist({
                 )}
               </div>
             );
-          })}
+          }))
+        }
         </div>
 
         <DialogFooter>

@@ -6,20 +6,33 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MapPin, Calendar, Wrench, Navigation, Play, CheckCircle2 } from "lucide-react";
 import { useInspection } from "@/context/InspectionContext";
+import { JobDetailsSkeleton } from "@/components/skeletons/JobDetailsSkeleton";
 
 export default function JobDetails() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const { getJobById, getJobStats } = useInspection();
+
   const job = getJobById(jobId || "");
   const stats = getJobStats(jobId || "");
 
-  if (!job) {
-    return <div className="p-8 text-center text-muted-foreground">Job not found</div>;
+  const isJobDataIncomplete = job && job.estimatedDeviceCount === 0;
+  
+  if (!job || isJobDataIncomplete) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header showBack title="Loading..." />
+        <JobDetailsSkeleton />
+      </div>
+    );
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr || dateStr === "" || dateStr === "Invalid Date") return "N/A";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "N/A";
+    
+    return date.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
@@ -49,7 +62,7 @@ export default function JobDetails() {
                 <p className="text-sm text-muted-foreground uppercase tracking-wide">
                   {job.type === "maintenance" ? "Maintenance Job" : "Repair Job"}
                 </p>
-                <h2 className="text-xl font-bold mt-1">{job.name}</h2>
+                <h2 className="text-xl font-bold mt-1 break-words">{job.name}</h2>
               </div>
               <PriorityBadge priority={job.priority} />
             </div>
@@ -72,7 +85,7 @@ export default function JobDetails() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Site</p>
-                  <p className="font-medium">{job.siteName}</p>
+                  <p className="font-medium">{job.siteId}</p>
                   <p className="text-sm text-muted-foreground">{job.siteAddress}</p>
                 </div>
               </div>
@@ -102,7 +115,7 @@ export default function JobDetails() {
             {/* Stats */}
             <div className="flex items-center gap-6 pt-4 border-t border-border">
               <div className="text-center">
-                <p className="text-2xl font-bold text-foreground">{stats.total}</p>
+                <p className="text-2xl font-bold text-foreground">{job.estimatedDeviceCount}</p>
                 <p className="text-sm text-muted-foreground">Total Devices</p>
               </div>
               {stats.completed > 0 && (
@@ -134,7 +147,12 @@ export default function JobDetails() {
 
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
-          <Button variant="outline" size="lg" className="h-14">
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="h-14"
+            onClick={() => window.open(`https://maps.google.com/?q=${job.siteGpsLat},${job.siteGpsLng}`, '_blank')}
+          >
             <Navigation className="w-5 h-5 mr-2" />
             Navigate to Site
           </Button>

@@ -16,9 +16,10 @@ import { useState, useEffect } from "react";
 
 export default function Home() {
   const navigate = useNavigate();
-  const { technician, selectedSiteId, sites } = useInspection();
+  const { technician, selectedSiteId, selectedCustomerId, sites } = useInspection();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  // Find the selected site from the sites for the selected customer
   const selectedSite = sites.find((s) => s.id === selectedSiteId);
 
   useEffect(() => {
@@ -82,8 +83,8 @@ export default function Home() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Current Site</p>
-                  <p className="font-semibold">{selectedSite?.name || "All Sites"}</p>
-                  {selectedSite && (
+                  <p className="font-semibold">{selectedSite?.site_code || "All Sites"}</p>
+                  {selectedSite && selectedSite.address && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                       <MapPin className="w-3 h-3" />
                       {selectedSite.address}
@@ -123,11 +124,11 @@ export default function Home() {
               <button
                 key={action.id}
                 onClick={action.onClick}
-                className={`${isFullWidth ? "col-span-2" : ""} relative group`}
+                className={`${isFullWidth ? "col-span-2" : ""} relative group h-full`}
               >
-                <Card className="border-border hover:border-primary/50 transition-all duration-200 active:scale-[0.98]">
-                  <CardContent className={`p-6 flex ${isFullWidth ? "flex-row items-center gap-5" : "flex-col items-center gap-3"} text-center`}>
-                    <div className={`${action.color} ${isFullWidth ? "w-16 h-16" : "w-14 h-14"} rounded-2xl flex items-center justify-center`}>
+                <Card className="h-full border-border hover:border-primary/50 transition-all duration-200 active:scale-[0.98]">
+                  <CardContent className={`h-full p-6 flex ${isFullWidth ? "flex-row items-center gap-5" : "flex-col items-center gap-3"} text-center`}>
+                    <div className={`${action.color} ${isFullWidth ? "w-16 h-16" : "w-14 h-14"} rounded-2xl flex items-center justify-center shrink-0`}>
                       <Icon className={`${isFullWidth ? "w-8 h-8" : "w-7 h-7"}`} />
                     </div>
                     <div className={isFullWidth ? "text-left" : ""}>

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { Priority } from "@/data/mockData";
+import type { Priority } from "@/types";
 
 interface PriorityBadgeProps {
   priority: Priority;
@@ -22,10 +22,15 @@ const priorityConfig = {
     icon: "🩷",
     className: "bg-normal/20 text-normal border-normal/30",
   },
+  low: {
+    label: "Low",
+    icon: "🟢",
+    className: "bg-success/20 text-success border-success/30",
+  },
 };
 
 export function PriorityBadge({ priority, className }: PriorityBadgeProps) {
-  const config = priorityConfig[priority];
+  const config = priorityConfig[priority] || priorityConfig.normal; // Fallback to normal if priority is undefined
 
   return (
     <span

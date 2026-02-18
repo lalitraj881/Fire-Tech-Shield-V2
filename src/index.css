@@ -1,3 +1,7 @@
+/* Leaflet CSS for Maps - Must be imported first */
+@import 'leaflet/dist/leaflet.css';
+@import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

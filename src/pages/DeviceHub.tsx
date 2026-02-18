@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { StatusBadge } from "@/components/StatusBadge";
 import { InspectionChecklist } from "@/components/InspectionChecklist";
@@ -23,44 +23,154 @@ import {
   MapPin,
   Camera,
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  Shield,
+  Clock,
+  Building2
 } from "lucide-react";
 import { useInspection } from "@/context/InspectionContext";
 import { type InspectionSeverity } from "@/data/mockData";
+import { QRScanner } from "@/components/QRScanner";
+import { Device } from "@/types";
 
 export default function DeviceHub() {
   const { deviceId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
-  const { devices, updateDeviceStatus, getNcsByDeviceId, jobs } = useInspection();
+  // Call useInspection only once
+  const { getDeviceById, updateDeviceStatus, getNcsByDeviceId, jobs, submitInspectionResults } = useInspection();
   
-  const device = devices.find((d) => d.id === deviceId);
+  // Try to get device from Context OR Navigation State (passed from Scan)
+  let device: Device | undefined = getDeviceById(deviceId || "");
+  
+  // If not in context, check if we got data from the API scan
+  if (!device && location.state?.apiData) {
+    const apiData = location.state.apiData;
+    // Map API data to Device interface temporarily for display
+    device = {
+      id: apiData.name, // The API returns 'name' as the ID
+      name: apiData.item_code || apiData.name, // Use item_code as name if available
+      serialNumber: apiData.serial_no || "N/A",
+      type: apiData.device_type || "Unknown",
+      systemType: apiData.system_type || "Unknown",
+      manufacturer: apiData.brand || "Unknown",
+      locationDescription: apiData.location || "",
+      building:  "", // Not in API data shown so far
+      zone: "",
+      jobId: "external-scan", // Placeholder
+      status: "pending", 
+      isVerified: true, // We just scanned it
+      installationDate: apiData.installation_date,
+      purchaseDate: apiData.purchase_date,
+      expiryDate: apiData.expiry_date,
+      warrantyEnd: apiData.warranty_expiry_date,
+      imageUrl: apiData.image,
+      gpsLat: 0,
+      gpsLng: 0,
+      manufacturingDate: "",
+      warrantyStart: ""
+    };
+  }
+
   const ncs = getNcsByDeviceId(deviceId || "");
   const deviceJob = jobs.find((j) => j.id === device?.jobId);
+  console.log('device', device);
+  console.log('ncs', ncs);
+  console.log('deviceJob', deviceJob);
 
   const [showChecklist, setShowChecklist] = useState(false);
   const [showMissingDialog, setShowMissingDialog] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
   const [missingNote, setMissingNote] = useState("");
   const [missingPhoto, setMissingPhoto] = useState(false);
 
   if (!device) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Device not found</p>
+      <div className="min-h-screen bg-background flex items-center justify-center flex-col gap-4">
+        <p className="text-muted-foreground">Device not found in local database.</p>
+        <Button variant="outline" onClick={() => navigate("/scan")}>
+          Scan Another
+        </Button>
       </div>
     );
   }
 
-  const handleInspectionComplete = (result: "pass" | "fail", severity: InspectionSeverity) => {
-    const newStatus = result === "pass" ? "completed" : "failed";
-    updateDeviceStatus(device.id, newStatus);
-    toast({
-      title: result === "pass" ? "✅ Inspection Passed" : "⚠️ Issues Found",
-      description: result === "pass" ? "Device passed all checks" : "NC created automatically",
+  const formatDate = (d: string | undefined) => {
+    if (!d || d === "") return "N/A";
+    
+    const date = new Date(d);
+    if (isNaN(date.getTime())) return "N/A";
+    
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   };
 
+  const validateDeviceQR = (scannedId: string): boolean => {
+    if (!device) return false;
+    const cleanId = scannedId.trim();
+    
+    const isMatch = 
+      device.id === cleanId || 
+      device.id === scannedId ||
+      device.name === cleanId ||
+      device.name === scannedId ||
+      device.serialNumber === cleanId ||
+      device.serialNumber === scannedId;
+    
+    return isMatch;
+  };
+
+  const handleQRScanSuccess = (scannedDeviceId: string) => {
+    toast({
+      title: "✅ Device Verified",
+      description: "Device verification successful",
+    });
+    setShowQRScanner(false);
+  };
+
+  const handleInspectionComplete = async (
+    result: "pass" | "fail",
+    severity: InspectionSeverity,
+    checklistResults?: any[]
+  ) => {
+    if (!device) return;
+    try {
+      // Submit inspection results to API if available
+      if (submitInspectionResults && deviceJob && checklistResults) {
+        await submitInspectionResults({
+          jobId: deviceJob.id,
+          deviceId: device.id,
+          results: checklistResults,
+          overallResult: result
+        });
+      }
+      
+      // Update device status
+      const newStatus = result === "pass" ? "completed" : "failed";
+      updateDeviceStatus(device.id, newStatus);
+      
+      toast({
+        title: result === "pass" ? "✅ Inspection Passed" : "⚠️ Issues Found",
+        description: result === "pass" 
+          ? "Device passed all checks" 
+          : "NC created automatically",
+      });
+    } catch (error) {
+      console.error("Failed to submit inspection:", error);
+      toast({
+        title: "❌ Submission Failed",
+        description: "Failed to submit inspection results. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleMarkMissing = () => {
+    if (!device) return;
     updateDeviceStatus(device.id, "failed");
     setShowMissingDialog(false);
     toast({
@@ -113,53 +223,145 @@ export default function DeviceHub() {
     <div className="min-h-screen bg-background pb-8">
       <Header showBack title={device.name} />
       <main className="container px-4 py-6 space-y-6">
-        {/* Device Photo & Status */}
+        {/* Device Image & QR Code Card */}
         <Card>
           <CardContent className="p-4">
-            <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
-              {device.imageUrl ? (
-                <img
-                  src={device.imageUrl}
-                  alt={device.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <ImageIcon className="w-16 h-16 text-muted-foreground" />
+            <div className="grid grid-cols-2 gap-4">
+              {/* Device Image */}
+              <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+                {device.imageUrl ? (
+                  <img
+                    src={"https://aivio.c-metric.net" + device.imageUrl}
+                    alt={device.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <ImageIcon className="w-12 h-12 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="absolute top-2 right-2">
+                  <StatusBadge status={device.status} />
                 </div>
-              )}
-              <div className="absolute top-3 right-3">
-                <StatusBadge status={device.status} />
+              </div>
+
+              {/* QR Code */}
+              <div className="aspect-square rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 flex flex-col items-center justify-center p-4">
+                {device.isVerified ? (
+                  <>
+                    <CheckCircle2 className="w-16 h-16 text-success mb-2" />
+                    <p className="text-xs text-success text-center font-semibold">
+                      Device Verified
+                    </p>
+                    <p className="text-xs text-muted-foreground text-center font-mono mt-1">
+                      {device.serialNumber}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <QrCode className="w-16 h-16 text-primary mb-2" />
+                    <p className="text-xs text-muted-foreground text-center font-mono">
+                      {device.serialNumber}
+                    </p>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="mt-2 text-xs"
+                      onClick={() => setShowQRScanner(true)}
+                    >
+                      Scan to Verify
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Device Info */}
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold">{device.name}</h2>
-                  <p className="text-sm text-muted-foreground">{device.type}</p>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                  <QrCode className="w-5 h-5 text-primary" />
-                  <span className="font-mono text-sm">{device.serialNumber}</span>
-                </div>
+        {/* Device Info Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              Device Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-muted-foreground">Serial Number</p>
+                <p className="font-medium font-mono">{device.serialNumber || "N/A"}</p>
               </div>
-
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30">
-                <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium">{device.building} - {device.zone}</p>
-                  <p className="text-xs text-muted-foreground">{device.locationDescription}</p>
-                </div>
+              <div>
+                <p className="text-muted-foreground">Type</p>
+                <p className="font-medium">{device.type || "N/A"}</p>
               </div>
+              <div>
+                <p className="text-muted-foreground">System Type</p>
+                <p className="font-medium">{device.systemType || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Manufacturer</p>
+                <p className="font-medium">{device.manufacturer || "N/A"}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-              {device.gpsLat && device.gpsLng && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <MapPin className="w-3 h-3" />
-                  <span>GPS: {device.gpsLat.toFixed(6)}, {device.gpsLng.toFixed(6)}</span>
-                </div>
-              )}
+        {/* Location Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-primary" />
+              Location
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-start gap-3">
+              <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="font-medium">{device.building || device.locationDescription || "N/A"}</p>
+                <p className="text-muted-foreground">{device.zone || device.locationDescription || "N/A"}</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-sm">{device.locationDescription || "N/A"}</p>
+            </div>
+            {device.gpsLat && device.gpsLng && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <MapPin className="w-3 h-3" />
+                <span>GPS: {device.gpsLat.toFixed(6)}, {device.gpsLng.toFixed(6)}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Dates Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Important Dates
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Installed Date</p>
+                <p className="font-medium">{formatDate(device.installationDate)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Purchase Date</p>
+                <p className="font-medium">{formatDate(device.purchaseDate)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Expiry Date</p>
+                <p className="font-medium">{formatDate(device.expiryDate)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Warranty End</p>
+                <p className="font-medium">{formatDate(device.warrantyEnd)}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -205,7 +407,7 @@ export default function DeviceHub() {
       </main>
 
       {/* Maintenance Checklist */}
-      {deviceJob && (
+      {deviceJob && device && (
         <InspectionChecklist
           open={showChecklist}
           onOpenChange={setShowChecklist}
@@ -251,6 +453,18 @@ export default function DeviceHub() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* QR Scanner Modal */}
+      {device && (
+      <QRScanner
+        open={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        onScanSuccess={handleQRScanSuccess}
+        onValidate={validateDeviceQR}
+        expectedDeviceId={device.id}
+        deviceName={device.name}
+      />
+      )}
     </div>
   );
 }

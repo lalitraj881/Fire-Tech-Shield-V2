@@ -116,7 +116,7 @@ export default function NCDetails() {
             <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
               {nc.deviceImageUrl ? (
                 <img
-                  src={nc.deviceImageUrl}
+                  src={"https://aivio.c-metric.net/"+nc.deviceImageUrl}
                   alt={nc.deviceName}
                   className="w-full h-full object-cover"
                 />

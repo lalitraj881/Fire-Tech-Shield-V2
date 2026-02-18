@@ -13,7 +13,7 @@ import {
   Smartphone
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { Job } from "@/data/mockData";
+import type { Job } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface JobCardProps {
@@ -37,6 +37,7 @@ export function JobCard({ job, className }: JobCardProps) {
     // Would open maps navigation in real app
     window.open(`https://maps.google.com/?q=${job.siteGpsLat},${job.siteGpsLng}`, '_blank');
   };
+
 
   return (
     <Card
@@ -69,7 +70,7 @@ export function JobCard({ job, className }: JobCardProps) {
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <MapPin className="w-4 h-4 shrink-0" />
-              <span className="truncate">{job.siteName}</span>
+              <span className="truncate">{job.siteId}</span>
             </div>
             <div className="text-xs text-muted-foreground pl-6 truncate">
               {job.siteAddress}

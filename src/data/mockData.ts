@@ -1,71 +1,35 @@
-export type Priority = 'critical' | 'semicritical' | 'normal';
-export type JobType = 'maintenance' | 'repair';
-export type DeviceStatus = 'pending' | 'completed' | 'failed';
-export type JobStatus = 'not-started' | 'in-progress' | 'completed';
-export type InspectionResult = 'pass' | 'fail' | null;
-export type InspectionSeverity = 'pass' | 'minor' | 'critical' | 'optional';
+import type {
+  Priority,
+  JobType,
+  DeviceStatus,
+  JobStatus,
+  InspectionResult,
+  InspectionSeverity,
+  Customer,
+  Site,
+  Job,
+  Device,
+  ChecklistItem,
+  NC,
+  Technician
+} from '@/types';
 
-export interface Customer {
-  id: string;
-  name: string;
-  contactPerson: string;
-  email: string;
-  phone: string;
-}
-
-export interface Site {
-  id: string;
-  customerId: string;
-  name: string;
-  address: string;
-  gpsLat: number;
-  gpsLng: number;
-  totalDevices: number;
-}
-
-export interface Job {
-  id: string;
-  name: string;
-  type: JobType;
-  customerId: string;
-  customerName: string;
-  siteId: string;
-  siteName: string;
-  siteAddress: string;
-  siteGpsLat: number;
-  siteGpsLng: number;
-  lastInspectionDate: string;
-  nextDueDate: string;
-  priority: Priority;
-  estimatedDeviceCount: number;
-  openNCCount: number;
-  ncReference?: string;
-  status: JobStatus;
-}
-
-export interface Device {
-  id: string;
-  name: string;
-  serialNumber: string;
-  type: string;
-  systemType: string;
-  building: string;
-  zone: string;
-  locationDescription: string;
-  gpsLat?: number;
-  gpsLng?: number;
-  imageUrl?: string;
-  manufacturer: string;
-  installationDate: string;
-  manufacturingDate: string;
-  purchaseDate: string;
-  warrantyStart: string;
-  warrantyEnd: string;
-  expiryDate: string;
-  status: DeviceStatus;
-  jobId: string;
-  installed?: boolean;
-}
+// Re-export types for convenience
+export type {
+  Priority,
+  JobType,
+  DeviceStatus,
+  JobStatus,
+  InspectionResult,
+  InspectionSeverity,
+  Customer,
+  Site,
+  Job,
+  Device,
+  ChecklistItem,
+  NC,
+  Technician
+};
 
 export interface InspectionHistory {
   id: string;
@@ -76,60 +40,6 @@ export interface InspectionHistory {
   severity?: InspectionSeverity;
   notes?: string;
   ncId?: string;
-}
-
-export interface ChecklistItem {
-  id: string;
-  name: string;
-  type: 'toggle' | 'numeric' | 'text';
-  required: boolean;
-  critical: boolean;
-  unit?: string;
-  minValue?: number;
-  maxValue?: number;
-}
-
-export interface NC {
-  id: string;
-  deviceId: string;
-  deviceName: string;
-  deviceType: string;
-  deviceSystemType: string;
-  deviceImageUrl?: string;
-  deviceLocationDescription: string;
-  deviceGpsLat?: number;
-  deviceGpsLng?: number;
-  jobId: string;
-  customerId: string;
-  customerName: string;
-  siteId: string;
-  siteName: string;
-  siteAddress: string;
-  siteGpsLat: number;
-  siteGpsLng: number;
-  status: 'open' | 'closed';
-  severity: InspectionSeverity;
-  description: string;
-  failedChecklistItems: string[];
-  technicianRemarks: string;
-  photoEvidence: string[];
-  inspectionJobId: string;
-  createdDate: string;
-  createdBy: string;
-  closedDate?: string;
-  repairedBy?: string;
-  workOrderId?: string;
-  workOrderStatus?: 'pending' | 'assigned' | 'in-progress' | 'completed';
-  workOrderAssignedTo?: string;
-}
-
-export interface Technician {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  assignedCustomerIds: string[];
-  assignedSiteIds: string[];
 }
 
 // Mock Customers

@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://aivio.c-metric.net/api/:path*"
+    },
+    {
+      "source": "/files/:path*",
+      "destination": "https://aivio.c-metric.net/files/:path*"
+    },
+    {
+      "source": "/private/:path*",
+      "destination": "https://aivio.c-metric.net/private/:path*"
+    },
+    {
+      "source": "/custom-api/:path*",
+      "destination": "http://202.131.111.246:8000/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

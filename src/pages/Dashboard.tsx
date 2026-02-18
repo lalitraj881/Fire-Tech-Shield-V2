@@ -1,7 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { JobCard } from "@/components/JobCard";
-import { SearchFilter, defaultFilters, FilterState } from "@/components/SearchFilter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -17,82 +16,62 @@ import {
 } from "lucide-react";
 import { useInspection } from "@/context/InspectionContext";
 import { cn } from "@/lib/utils";
+import { getDashboardData, type DashboardData } from "@/services/dashboardService";
+import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("all");
-  const [filters, setFilters] = useState<FilterState>(defaultFilters);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
+  
   const { 
     jobs, 
-    customers, 
-    sites, 
+    assignedCustomers, 
     selectedCustomerId, 
     selectedSiteId,
     getJobsByCustomerAndSite,
-    technician
+    technician,
+    assignedSites
   } = useInspection();
 
-  // Get filtered jobs based on selection
-  const baseJobs = useMemo(() => {
-    return getJobsByCustomerAndSite(
-      selectedCustomerId || undefined, 
-      selectedSiteId || undefined
-    );
-  }, [selectedCustomerId, selectedSiteId, getJobsByCustomerAndSite]);
-
-  // Apply search and filters
-  const filteredJobs = useMemo(() => {
-    let result = baseJobs;
-
-    // Search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      result = result.filter((job) =>
-        job.name.toLowerCase().includes(searchLower) ||
-        job.siteName.toLowerCase().includes(searchLower) ||
-        job.customerName.toLowerCase().includes(searchLower) ||
-        job.ncReference?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // Status filter
-    if (filters.status !== "all") {
-      result = result.filter((job) => job.status === filters.status);
-    }
-
-    // Priority filter
-    if (filters.priority !== "all") {
-      result = result.filter((job) => job.priority === filters.priority);
-    }
-
-    // Type filter
-    if (filters.type !== "all") {
-      result = result.filter((job) => job.type === filters.type);
-    }
-
-    // Show completed filter
-    if (!filters.showCompleted) {
-      result = result.filter((job) => job.status !== "completed");
-    }
-
-    return result;
-  }, [baseJobs, filters]);
-
   // Categorize jobs by status
-  const pendingJobs = filteredJobs.filter((j) => j.status === "not-started");
-  const inProgressJobs = filteredJobs.filter((j) => j.status === "in-progress");
-  const maintenanceJobs = filteredJobs.filter((j) => j.type === "maintenance" && j.status !== "completed");
-  const repairJobs = filteredJobs.filter((j) => j.type === "repair" && j.status !== "completed");
-
+  const pendingJobs = jobs.filter((j) => j.status === "not-started");
+  const inProgressJobs = jobs.filter((j) => j.status === "in-progress");
+  const maintenanceJobs = jobs.filter((j) => j.type === "maintenance" && j.status !== "completed");
+  const repairJobs = jobs.filter((j) => j.type === "repair" && j.status !== "completed");
+  
   // Get selected customer and site details
-  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
-  const selectedSite = sites.find((s) => s.id === selectedSiteId);
+  const selectedCustomer = assignedCustomers.find((c) => c.name === selectedCustomerId);
+  const selectedSite = assignedSites[selectedCustomerId]?.find((s) => s.name === selectedSiteId);
+  
+  // Fetch dashboard data when site changes
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      if (selectedSiteId && selectedSite) {
+        setLoadingDashboard(true);
+        // Use site_code for the API call, not the site ID
+        const siteCode = selectedSite.site_code || selectedSiteId;
+        console.log('Fetching dashboard for site:', siteCode);
+        const data = await getDashboardData(siteCode);
+        console.log('Dashboard data received:', data);
+        setDashboardData(data);
+        setLoadingDashboard(false);
+      } else {
+        setDashboardData(null);
+      }
+    };
+    
+    fetchDashboard();
+  }, [selectedSiteId, selectedSite]);
+  
+  // Use dashboard API data only - no fallback to calculated values
+  const totalDevices = dashboardData?.total_devices ?? 0;
+  const openNCCount = dashboardData?.open_nc ?? 0;
 
-  // Calculate total devices at selected site
-  const totalDevices = selectedSite?.totalDevices || 
-    sites.filter((s) => !selectedCustomerId || s.customerId === selectedCustomerId)
-      .reduce((acc, s) => acc + s.totalDevices, 0);
-
+  console.log(dashboardData);
+  
   const formatDate = (dateStr: string) => {
+    if (!dateStr) return "N/A";
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -100,14 +79,21 @@ export default function Dashboard() {
     });
   };
 
-  // Find next due job for display
-  const nextDueJob = baseJobs
-    .filter((j) => j.status !== "completed")
-    .sort((a, b) => new Date(a.nextDueDate).getTime() - new Date(b.nextDueDate).getTime())[0];
+  // Use API data only - show N/A if not available
+  const nextDueDate = dashboardData?.next_due_date;
+  const lastInspectionDate = dashboardData?.last_inspection_date;
 
-  // Last inspection from any job
-  const lastInspection = baseJobs
-    .sort((a, b) => new Date(b.lastInspectionDate).getTime() - new Date(a.lastInspectionDate).getTime())[0];
+  // Show skeleton if jobs are still loading (empty array with selected site means loading)
+  const isLoadingJobs = selectedSiteId && jobs.length === 0;
+  
+  if (isLoadingJobs || loadingDashboard) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <Header />
+        <DashboardSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -119,7 +105,7 @@ export default function Dashboard() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Welcome back,</p>
-                <h2 className="text-xl font-bold text-foreground">{technician.name}</h2>
+                <h2 className="text-xl font-bold text-foreground">{technician?.name}</h2>
               </div>
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-success/20 border border-success/30">
                 <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
@@ -143,7 +129,7 @@ export default function Dashboard() {
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Site</p>
                   <p className="text-sm font-medium truncate">
-                    {selectedSite?.name || "All Sites"}
+                    {dashboardData?.site_name || selectedSite?.site_code || selectedSite?.name || "All Sites"}
                   </p>
                 </div>
               </div>
@@ -171,7 +157,7 @@ export default function Dashboard() {
                 <span className="text-xs">Last Inspection</span>
               </div>
               <p className="text-lg font-bold">
-                {lastInspection ? formatDate(lastInspection.lastInspectionDate) : "N/A"}
+                {lastInspectionDate ? formatDate(lastInspectionDate) : "N/A"}
               </p>
             </CardContent>
           </Card>
@@ -184,7 +170,7 @@ export default function Dashboard() {
                 <span className="text-xs">Next Due</span>
               </div>
               <p className="text-lg font-bold text-primary">
-                {nextDueJob ? formatDate(nextDueJob.nextDueDate) : "N/A"}
+                {nextDueDate ? formatDate(nextDueDate) : "N/A"}
               </p>
             </CardContent>
           </Card>
@@ -210,7 +196,7 @@ export default function Dashboard() {
                 <span className="text-xs">Open NCs</span>
               </div>
               <p className="text-lg font-bold text-warning">
-                {baseJobs.reduce((acc, j) => acc + j.openNCCount, 0)}
+                {openNCCount}
               </p>
             </CardContent>
           </Card>
@@ -226,14 +212,14 @@ export default function Dashboard() {
               {/* Pending */}
               <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50 border border-border">
                 <Clock className="w-5 h-5 text-muted-foreground mb-1" />
-                <span className="text-2xl font-bold">{baseJobs.filter(j => j.status === "not-started").length}</span>
+                <span className="text-2xl font-bold">{pendingJobs?.length}</span>
                 <span className="text-xs text-muted-foreground">Pending</span>
               </div>
 
               {/* In Progress */}
               <div className="flex flex-col items-center p-3 rounded-lg bg-primary/10 border border-primary/30">
                 <PlayCircle className="w-5 h-5 text-primary mb-1" />
-                <span className="text-2xl font-bold text-primary">{baseJobs.filter(j => j.status === "in-progress").length}</span>
+                <span className="text-2xl font-bold text-primary">{inProgressJobs?.length}</span>
                 <span className="text-xs text-primary">In Progress</span>
               </div>
 
@@ -241,21 +227,13 @@ export default function Dashboard() {
               <div className="flex flex-col items-center p-3 rounded-lg bg-success/10 border border-success/30">
                 <CheckCircle2 className="w-5 h-5 text-success mb-1" />
                 <span className="text-2xl font-bold text-success">
-                  {baseJobs.filter((j) => j.status === "completed").length}
+                  {jobs.filter((j) => j.status === "completed").length}
                 </span>
                 <span className="text-xs text-success">Completed</span>
               </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Search & Filter */}
-        <SearchFilter
-          value={filters}
-          onChange={setFilters}
-          mode="jobs"
-          placeholder="Search jobs, sites, customers..."
-        />
 
         {/* Jobs Tabs */}
         <div>
@@ -265,19 +243,19 @@ export default function Dashboard() {
               <TabsTrigger value="all" className="gap-1.5 text-xs">
                 All
                 <span className="px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px]">
-                  {filteredJobs.filter((j) => j.status !== "completed").length}
+                  {jobs.filter((j) => j.status !== "completed").length}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="maintenance" className="gap-1.5 text-xs">
                 <Wrench className="w-3.5 h-3.5" />
-                Maint
+                Maintenance
                 <span className="px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-[10px]">
                   {maintenanceJobs.length}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="repair" className="gap-1.5 text-xs">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                Repair
+                Repairs
                 <span className="px-1.5 py-0.5 rounded-full bg-accent/20 text-accent text-[10px]">
                   {repairJobs.length}
                 </span>
@@ -286,44 +264,44 @@ export default function Dashboard() {
 
             <TabsContent value="all" className="space-y-4 animate-fade-in">
               {/* In Progress Jobs First */}
-              {inProgressJobs.length > 0 && (
+              {inProgressJobs?.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-primary flex items-center gap-2">
                     <PlayCircle className="w-4 h-4" />
                     In Progress
                   </h4>
-                  {inProgressJobs.map((job) => (
+                  {inProgressJobs?.map((job) => (
                     <JobCard key={job.id} job={job} />
                   ))}
                 </div>
               )}
 
               {/* Pending Jobs */}
-              {pendingJobs.length > 0 && (
+              {pendingJobs?.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <Clock className="w-4 h-4" />
                     Pending
                   </h4>
-                  {pendingJobs.map((job) => (
+                  {pendingJobs?.map((job) => (
                     <JobCard key={job.id} job={job} />
                   ))}
                 </div>
               )}
 
-              {filteredJobs.filter((j) => j.status !== "completed").length === 0 && (
+              {jobs.filter((j) => j.status !== "completed").length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>{filters.search ? "No matching jobs found" : "All jobs completed!"}</p>
+                  <p>All jobs completed!</p>
                 </div>
               )}
             </TabsContent>
 
             <TabsContent value="maintenance" className="space-y-4 animate-fade-in">
-              {maintenanceJobs.map((job) => (
+              {maintenanceJobs?.map((job) => (
                 <JobCard key={job.id} job={job} />
               ))}
-              {maintenanceJobs.length === 0 && (
+              {maintenanceJobs?.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Wrench className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No maintenance jobs</p>
@@ -332,10 +310,10 @@ export default function Dashboard() {
             </TabsContent>
 
             <TabsContent value="repair" className="space-y-4 animate-fade-in">
-              {repairJobs.map((job) => (
+              {repairJobs?.map((job) => (
                 <JobCard key={job.id} job={job} />
               ))}
-              {repairJobs.length === 0 && (
+              {repairJobs?.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <AlertTriangle className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No repair jobs</p>

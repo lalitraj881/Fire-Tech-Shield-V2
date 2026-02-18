@@ -1,11 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { DeviceCard } from "@/components/DeviceCard";
 import { ProgressIndicator } from "@/components/ProgressIndicator";
-import { LiveGPSMap } from "@/components/LiveGPSMap";
+import { LeafletGPSMap } from "@/components/LeafletGPSMap";
 import { QRScanner } from "@/components/QRScanner";
-import { SearchFilter, defaultFilters, FilterState } from "@/components/SearchFilter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QrCode, CheckCircle2 } from "lucide-react";
@@ -16,74 +15,54 @@ export default function DeviceList() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { getJobById, getDevicesByJobId, getJobStats } = useInspection();
+  const { getJobById, getDevicesByJobId, getJobStats, loadJobDetails, markDeviceAsVerified } = useInspection();
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [filters, setFilters] = useState<FilterState>({
-    ...defaultFilters,
-    showCompleted: true, // Show all devices by default
-  });
+  
+  // Load job details on mount or when jobId changes
+  useEffect(() => {
+    if (jobId) {
+      loadJobDetails(jobId);
+    }
+  }, [jobId, loadJobDetails]);
   
   const job = getJobById(jobId || "");
   const devices = getDevicesByJobId(jobId || "");
   const stats = getJobStats(jobId || "");
-
-  // Apply filters to devices
-  const filteredDevices = useMemo(() => {
-    let result = devices;
-
-    // Search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      result = result.filter((device) =>
-        device.name.toLowerCase().includes(searchLower) ||
-        device.serialNumber.toLowerCase().includes(searchLower) ||
-        device.locationDescription.toLowerCase().includes(searchLower) ||
-        device.type.toLowerCase().includes(searchLower) ||
-        device.building.toLowerCase().includes(searchLower) ||
-        device.zone.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // Status filter
-    if (filters.status !== "all") {
-      result = result.filter((device) => device.status === filters.status);
-    }
-
-    // Show completed filter
-    if (!filters.showCompleted) {
-      result = result.filter((device) => device.status === "pending");
-    }
-
-    return result;
-  }, [devices, filters]);
   
   const pendingDevice = devices.find((d) => d.status === "pending");
 
   const handleScanSuccess = (deviceId: string) => {
+    // Navigate to device details (validation already done in scanner)
+    markDeviceAsVerified(deviceId);
     setScannerOpen(false);
-    toast({
-      title: "✅ Device Verified",
-      description: `${pendingDevice?.name} matched successfully`,
-    });
     navigate(`/job/${jobId}/device/${deviceId}`);
   };
 
   const handleQRScan = () => {
-    if (pendingDevice) {
       setScannerOpen(true);
-    } else {
-      toast({
-        title: "All devices inspected",
-        description: "No pending devices remaining",
-      });
-    }
+  };
+  
+  const validateDevice = (scannedId: string): boolean => {
+    // Clean ID (sometimes might have %20 or spaces depending on scanner/API)
+    const cleanId = scannedId.trim();
+    
+    // Check if device belongs to this job
+    // IMPORTANT: Check simple ID equality first, then name
+    const deviceInJob = devices.find(d => 
+        d.id === cleanId || 
+        d.name === cleanId ||
+        d.id === scannedId || 
+        d.name === scannedId
+    );
+    
+    return !!deviceInJob;
   };
 
   if (!job) return <div className="p-8 text-center text-muted-foreground">Job not found</div>;
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <Header showBack title={job.siteName} />
+      <Header showBack title={job.name} />
       <main className="container px-4 py-6 space-y-6">
         {/* Progress Card */}
         <Card>
@@ -97,7 +76,7 @@ export default function DeviceList() {
         </Card>
 
         {/* Live GPS Map */}
-        <LiveGPSMap 
+        <LeafletGPSMap 
           siteName={job.siteName}
           siteGpsLat={job.siteGpsLat}
           siteGpsLng={job.siteGpsLng}
@@ -105,25 +84,11 @@ export default function DeviceList() {
           currentDevice={pendingDevice}
         />
 
-        {/* Search & Filter */}
-        <SearchFilter
-          value={filters}
-          onChange={setFilters}
-          mode="devices"
-          placeholder="Search devices, serial, location..."
-        />
-
         {/* Device List */}
         <div className="space-y-3">
-          {filteredDevices.map((device) => (
+          {devices.map((device) => (
             <DeviceCard key={device.id} device={device} jobId={jobId || ""} />
           ))}
-          
-          {filteredDevices.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>{filters.search ? "No matching devices found" : "No devices"}</p>
-            </div>
-          )}
         </div>
 
         {/* Complete Button */}
@@ -154,8 +119,7 @@ export default function DeviceList() {
         open={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onScanSuccess={handleScanSuccess}
-        expectedDeviceId={pendingDevice?.id}
-        deviceName={pendingDevice?.name}
+        onValidate={validateDevice}
       />
     </div>
   );
